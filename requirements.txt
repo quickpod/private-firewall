@@ -1,0 +1,4 @@
+# PrivateFirewall has NO third-party runtime dependencies — it uses only the
+# Python standard library (ctypes over the Windows WFP/iphlpapi/kernel32 APIs)
+# and PowerShell. This file is intentionally empty of runtime deps; CI installs
+# only PyInstaller to freeze the engine into an .exe.

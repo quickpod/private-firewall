@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Build output
+build/
+dist/
+packaging/dist/
+packaging/staging/
+*.spec
+
+# Runtime state / logs (created at %ProgramData%\PrivateFirewall at runtime)
+logs/
+config.json
+
+# Local env / scratch
+.env
+.env.*
+*.tmp
+
+# Never commit built binaries
+*.exe

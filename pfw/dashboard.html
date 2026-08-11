@@ -1,0 +1,531 @@
+<title>PrivateFirewall</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --surface-2:#222220;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+    --down:#3987e5;      /* series 1 blue  = inbound  */
+    --up:#d95926;        /* series 2 orange= outbound */
+    --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --mono:"Cascadia Code",ui-monospace,"Consolas",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--plane);color:var(--ink);font-family:var(--sans);
+       font-size:14px;line-height:1.4}
+  a{color:var(--down)}
+  header{display:flex;align-items:center;gap:16px;padding:14px 20px;
+         border-bottom:1px solid var(--border);position:sticky;top:0;
+         background:var(--plane);z-index:5}
+  header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.02em}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;
+       margin-right:6px;background:var(--muted)}
+  .dot.live{background:var(--good);box-shadow:0 0 8px var(--good)}
+  .dot.err{background:var(--critical)}
+  .pill{font-size:12px;color:var(--ink-2);padding:3px 9px;border:1px solid var(--border);
+        border-radius:999px;white-space:nowrap}
+  .pill.warn{color:var(--warning);border-color:var(--warning)}
+  .grow{flex:1}
+  main{padding:20px;max-width:1500px;margin:0 auto}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+        padding:14px 16px}
+  .tile .lab{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .tile .val{font-size:26px;font-weight:600}
+  .tile .val small{font-size:14px;color:var(--ink-2);font-weight:400}
+  .tile .sub{font-size:12px;color:var(--ink-2);margin-top:3px}
+  .grid2{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:1000px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+        padding:16px;min-width:0}
+  .card h2{font-size:13px;font-weight:600;margin:0 0 12px;color:var(--ink-2);
+           text-transform:uppercase;letter-spacing:.05em;display:flex;
+           align-items:center;gap:8px}
+  .card h2 .count{color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-bottom:8px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch{width:20px;height:3px;border-radius:2px;display:inline-block}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;color:var(--muted);font-weight:500;padding:6px 8px;
+     position:sticky;top:0;background:var(--surface);cursor:pointer;user-select:none;
+     border-bottom:1px solid var(--border);white-space:nowrap}
+  td{padding:6px 8px;border-bottom:1px solid var(--grid);vertical-align:top}
+  tbody tr:hover{background:var(--surface-2)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .tag{font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--border)}
+  .tag.public{color:var(--warning);border-color:var(--warning)}
+  .tag.private{color:var(--ink-2)} .tag.loopback{color:var(--muted)}
+  .st-ESTABLISHED{color:var(--good)} .st-LISTEN{color:var(--warning)}
+  .st-TIME_WAIT,.st-CLOSE_WAIT,.st-SYN_SENT{color:var(--muted)}
+  button{font-family:var(--sans);font-size:12px;cursor:pointer;border-radius:6px;
+         border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
+         padding:4px 10px}
+  button:hover{border-color:var(--muted)}
+  button.danger{color:var(--critical);border-color:var(--critical)}
+  button.danger:hover{background:var(--critical);color:#fff}
+  button.on{background:var(--good);color:#04240b;border-color:var(--good);font-weight:600}
+  .scroll{max-height:360px;overflow:auto}
+  .alert{display:flex;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:8px;
+         background:var(--surface-2);border-left:3px solid var(--muted)}
+  .alert.critical{border-left-color:var(--critical)}
+  .alert.serious{border-left-color:var(--serious)}
+  .alert.warning{border-left-color:var(--warning)}
+  .alert .ic{font-size:16px;line-height:1.2}
+  .alert .t{font-weight:600} .alert .d{color:var(--ink-2);font-size:12px;margin-top:2px}
+  .alert .when{color:var(--muted);font-size:11px;margin-top:3px}
+  .feed{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+  .feed .row{padding:3px 0;border-bottom:1px solid var(--grid);white-space:nowrap;
+             overflow:hidden;text-overflow:ellipsis}
+  .feed .drop{color:var(--serious)} .feed .connect{color:var(--ink-2)}
+  .feed .action{color:var(--down)} .feed .error{color:var(--critical)}
+  .feed .when{color:var(--muted)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .toolbar input{font-family:var(--mono);font-size:12px;background:var(--surface-2);
+    border:1px solid var(--border);border-radius:6px;color:var(--ink);padding:5px 9px}
+  .empty{color:var(--muted);padding:16px;text-align:center;font-size:12px}
+  .muted-host{color:var(--muted);font-size:11px}
+  textarea{width:100%;min-height:340px;background:var(--surface-2);color:var(--ink);
+    border:1px solid var(--border);border-radius:8px;padding:12px;font-family:var(--mono);
+    font-size:12px;line-height:1.5;resize:vertical}
+  .cfgbar{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .cfgmsg{font-size:12px}
+  .cfgmsg.ok{color:var(--good)} .cfgmsg.err{color:var(--critical)}
+  .profile-pill{font-weight:600}
+  .banner{background:#3a1414;border:1px solid var(--critical);color:#ffd9d9;
+          padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13px}
+  .tt{position:fixed;pointer-events:none;background:#000;border:1px solid var(--border);
+      border-radius:6px;padding:6px 9px;font-size:12px;font-family:var(--mono);
+      z-index:20;opacity:0;transition:opacity .08s;white-space:nowrap}
+  svg text{fill:var(--muted);font-size:10px;font-family:var(--sans)}
+</style>
+
+<header>
+  <h1>🛡 PrivateFirewall</h1>
+  <span id="live"><span class="dot"></span><span id="livetxt">connecting…</span></span>
+  <span class="pill" id="net">—</span>
+  <span class="pill profile-pill" id="profile">—</span>
+  <span class="pill" id="adminpill">—</span>
+  <span class="grow"></span>
+  <span class="pill" id="uptime">—</span>
+  <button id="pause">⏸ pause</button>
+</header>
+
+<main>
+  <div id="adminbanner" class="banner" style="display:none">
+    ⚠ Engine is running <b>unelevated</b> — the dashboard is read-only. Kill, block
+    and lockdown controls need admin. Relaunch with
+    <span class="mono">Start-PrivateFirewall.ps1</span>.
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><div class="lab">Download</div>
+      <div class="val" id="t-down">—</div><div class="sub" id="t-down-pk"></div></div>
+    <div class="tile"><div class="lab">Upload</div>
+      <div class="val" id="t-up">—</div><div class="sub" id="t-up-pk"></div></div>
+    <div class="tile"><div class="lab">Active connections</div>
+      <div class="val" id="t-conns">—</div><div class="sub" id="t-conns-sub"></div></div>
+    <div class="tile"><div class="lab">Listening ports</div>
+      <div class="val" id="t-listen">—</div><div class="sub">inbound-exposed</div></div>
+    <div class="tile"><div class="lab">Blocked today</div>
+      <div class="val" id="t-drops">—</div><div class="sub">firewall drops</div></div>
+    <div class="tile"><div class="lab">Open alerts</div>
+      <div class="val" id="t-alerts">—</div><div class="sub" id="t-alerts-sub"></div></div>
+    <div class="tile"><div class="lab">Outbound policy</div>
+      <div class="val" id="t-policy" style="font-size:20px">—</div>
+      <div class="sub"><button id="lockdown">toggle lockdown</button></div></div>
+    <div class="tile"><div class="lab">IPv6</div>
+      <div class="val" id="t-ipv6" style="font-size:20px">—</div>
+      <div class="sub"><button id="ipv6">block all IPv6</button></div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Throughput <span class="count" id="thr-win">last 8 min</span></h2>
+      <div class="legend">
+        <span><span class="swatch" style="background:var(--down)"></span>Download</span>
+        <span><span class="swatch" style="background:var(--up)"></span>Upload</span>
+      </div>
+      <svg id="chart" width="100%" height="240" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="card">
+      <h2>Alerts <span class="count" id="alert-count"></span></h2>
+      <div class="scroll" id="alerts"><div class="empty">No alerts.</div></div>
+    </div>
+  </div>
+
+  <div class="grid2" style="grid-template-columns:1fr 1fr">
+    <div class="card">
+      <h2>Top talkers <span class="count">by process</span></h2>
+      <svg id="talkers" width="100%" height="200"></svg>
+    </div>
+    <div class="card">
+      <h2>Live event feed <span class="count">connections · drops · actions</span></h2>
+      <div class="scroll feed" id="feed"><div class="empty">Waiting…</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Active connections <span class="count" id="conn-count"></span></h2>
+    <div class="toolbar">
+      <input id="filter" placeholder="filter by process, ip, port, state…" size="34">
+      <label class="pill"><input type="checkbox" id="hide-local"> hide loopback</label>
+      <label class="pill"><input type="checkbox" id="only-est"> established only</label>
+      <span class="grow"></span>
+      <button id="block-ip-btn">⛔ block an IP…</button>
+    </div>
+    <div class="scroll" style="max-height:460px">
+      <table id="conns">
+        <thead><tr>
+          <th data-k="proc">Process</th><th data-k="pid">PID</th>
+          <th data-k="proto">Proto</th><th data-k="laddr">Local</th>
+          <th data-k="raddr">Remote</th><th data-k="class">Scope</th>
+          <th data-k="state">State</th><th>Actions</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Firewall rules created by PrivateFirewall <span class="count" id="rule-count"></span></h2>
+    <div class="scroll" style="max-height:240px">
+      <table id="rules"><thead><tr>
+        <th>Rule</th><th>Direction</th><th>Action</th><th>Target</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Settings — editable profile
+      <span class="count" id="cfg-src"></span></h2>
+    <p style="font-size:12px;color:var(--ink-2);margin:0 0 10px">
+      Live profile (<span class="mono" id="cfg-path">config.json</span>). Adjust alert
+      thresholds, auto-block, per-network behaviour, trusted IPs. Edits apply on Save;
+      the file is also hot-reloaded if you edit it on disk.</p>
+    <textarea id="cfg" spellcheck="false"></textarea>
+    <div class="cfgbar">
+      <button id="cfg-save" class="on">Save &amp; apply</button>
+      <button id="cfg-reload">Reload from disk</button>
+      <button id="cfg-format">Format JSON</button>
+      <span class="grow"></span>
+      <span class="cfgmsg" id="cfg-msg"></span>
+    </div>
+  </div>
+</main>
+
+<div class="tt" id="tt"></div>
+
+<script>
+const TOKEN = (location.hash.match(/t=([^&]+)/)||[])[1] || "";
+const $ = s => document.querySelector(s);
+const tt = $("#tt");
+let paused = false, last = null, sortKey = "proc", sortDir = 1;
+
+function fmtBps(b){
+  b*=8;
+  if(b>=1e9) return (b/1e9).toFixed(2)+" Gbps";
+  if(b>=1e6) return (b/1e6).toFixed(1)+" Mbps";
+  if(b>=1e3) return (b/1e3).toFixed(0)+" Kbps";
+  return b.toFixed(0)+" bps";
+}
+function fmtBytes(b){
+  if(b>=1e9) return (b/1e9).toFixed(1)+" GB";
+  if(b>=1e6) return (b/1e6).toFixed(1)+" MB";
+  if(b>=1e3) return (b/1e3).toFixed(0)+" KB";
+  return b+" B";
+}
+function ago(ts){
+  const s=Math.max(0,Date.now()/1000-ts);
+  if(s<60) return Math.floor(s)+"s ago";
+  if(s<3600) return Math.floor(s/60)+"m ago";
+  return Math.floor(s/3600)+"h ago";
+}
+function dur(s){
+  const h=Math.floor(s/3600),m=Math.floor(s%3600/60);
+  return h?`${h}h ${m}m`:`${m}m`;
+}
+async function api(path, body){
+  const r = await fetch(path,{method:"POST",headers:{"X-PFW-Token":TOKEN,
+    "Content-Type":"application/json"},body:JSON.stringify(body)});
+  const j = await r.json().catch(()=>({}));
+  if(!r.ok||!j.ok) alert("Action failed: "+(j.error||j.msg||r.status));
+  return j;
+}
+
+async function poll(){
+  try{
+    const r = await fetch("/api/state",{headers:{"X-PFW-Token":TOKEN}});
+    if(!r.ok) throw new Error(r.status);
+    last = await r.json();
+    $("#live").firstChild.className = "dot live";
+    $("#livetxt").textContent = "live";
+    if(!paused) render(last);
+  }catch(e){
+    $("#live").firstChild.className = "dot err";
+    $("#livetxt").textContent = "disconnected";
+  }
+}
+
+const SEV_ICON = {critical:"⛔",serious:"🔺",warning:"⚠",good:"✓"};
+const ICONS = {connect:"→",drop:"✗",action:"⚙",error:"!",listen:"◉"};
+
+function render(d){
+  // tiles
+  const h = d.history, cur = h[h.length-1] || {down:0,up:0,conns:0};
+  const pkDown = Math.max(0,...h.map(p=>p.down)), pkUp = Math.max(0,...h.map(p=>p.up));
+  $("#t-down").innerHTML = fmtBps(cur.down).replace(/ (\w+)$/,' <small>$1</small>');
+  $("#t-up").innerHTML   = fmtBps(cur.up).replace(/ (\w+)$/,' <small>$1</small>');
+  $("#t-down-pk").textContent = "peak "+fmtBps(pkDown);
+  $("#t-up-pk").textContent   = "peak "+fmtBps(pkUp);
+  const est = d.conns.filter(c=>c.state==="ESTABLISHED").length;
+  const pub = d.conns.filter(c=>c.class==="public"&&c.state==="ESTABLISHED").length;
+  $("#t-conns").textContent = est;
+  $("#t-conns-sub").textContent = pub+" to public IPs";
+  const listen = d.conns.filter(c=>c.state==="LISTEN" &&
+      !c.laddr.startsWith("127.") && c.laddr!=="::1").length;
+  $("#t-listen").textContent = listen;
+  $("#t-drops").textContent = d.drops_today;
+  $("#t-alerts").textContent = d.alerts.length;
+  const crit = d.alerts.filter(a=>a.severity==="critical").length;
+  $("#t-alerts-sub").textContent = crit?crit+" critical":"none critical";
+  $("#t-alerts-sub").style.color = crit?"var(--critical)":"";
+  $("#t-policy").textContent = d.lockdown?"🔒 lockdown":"allow";
+  $("#t-policy").style.color = d.lockdown?"var(--good)":"var(--ink-2)";
+  $("#lockdown").className = d.lockdown?"on":"";
+  $("#t-ipv6").textContent = d.ipv6_blocked?"⛔ blocked":"allowed";
+  $("#t-ipv6").style.color = d.ipv6_blocked?"var(--good)":"var(--ink-2)";
+  $("#ipv6").className = d.ipv6_blocked?"on":"";
+  $("#ipv6").textContent = d.ipv6_blocked?"allow IPv6":"block all IPv6";
+
+  // header
+  $("#net").textContent = d.profiles.length
+    ? d.profiles.map(p=>`${p.alias}: ${p.category}`).join("  ·  ") : "no active network";
+  $("#net").className = "pill"+(d.profiles.some(p=>p.category==="Public")?" warn":"");
+  const prof = d.active_profile;
+  $("#profile").textContent = prof ? `profile: ${prof}` : "profile: —";
+  $("#profile").className = "pill profile-pill"+(prof==="Public"?" warn":"");
+  $("#profile").title = d.notify ? `notify ≥ ${d.notify.min_severity}` : "";
+  $("#uptime").textContent = "engine "+dur(d.uptime);
+  $("#adminpill").textContent = d.admin?"admin ✓":"read-only";
+  $("#adminpill").className = "pill"+(d.admin?"":" warn");
+  $("#adminbanner").style.display = d.admin?"none":"block";
+
+  drawChart(d.history);
+  drawTalkers(d.conns);
+  renderAlerts(d.alerts);
+  renderFeed(d.events);
+  renderConns(d.conns, d.admin);
+  renderRules(d.rules, d.admin);
+}
+
+function renderAlerts(alerts){
+  const box = $("#alerts");
+  $("#alert-count").textContent = alerts.length?alerts.length+" total":"";
+  if(!alerts.length){ box.innerHTML='<div class="empty">No alerts.</div>'; return; }
+  box.innerHTML = alerts.slice().reverse().map(a=>`
+    <div class="alert ${a.severity}">
+      <div class="ic">${SEV_ICON[a.severity]||"•"}</div>
+      <div style="min-width:0">
+        <div class="t">${esc(a.title)}</div>
+        <div class="d">${esc(a.detail)}</div>
+        <div class="when">${esc(a.rule)} · ${ago(a.ts)}</div>
+      </div>
+    </div>`).join("");
+}
+
+function renderFeed(events){
+  const box = $("#feed");
+  if(!events.length){ box.innerHTML='<div class="empty">Waiting…</div>'; return; }
+  box.innerHTML = events.slice(-120).reverse().map(e=>`
+    <div class="row ${e.kind}"><span class="when">${ago(e.ts)}</span>
+      ${ICONS[e.kind]||"·"} ${esc(e.text)}</div>`).join("");
+}
+
+function renderConns(conns, admin){
+  const q = $("#filter").value.toLowerCase();
+  const hideLocal = $("#hide-local").checked, onlyEst = $("#only-est").checked;
+  let rows = conns.filter(c=>{
+    if(hideLocal && (c.class==="loopback"||c.raddr==="*"||c.raddr==="127.0.0.1")) return false;
+    if(onlyEst && c.state!=="ESTABLISHED") return false;
+    if(q){
+      const hay = `${c.proc} ${c.pid} ${c.proto} ${c.laddr}:${c.lport} ${c.raddr}:${c.rport} ${c.state}`.toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  $("#conn-count").textContent = rows.length+" shown / "+conns.length+" total";
+  rows.sort((a,b)=>{
+    let x=a[sortKey],y=b[sortKey];
+    if(sortKey==="pid"||sortKey==="lport"){x=+x;y=+y;}
+    return (x<y?-1:x>y?1:0)*sortDir;
+  });
+  const tb = $("#conns tbody");
+  tb.innerHTML = rows.slice(0,400).map(c=>{
+    const killable = admin && c.kill && c.state==="ESTABLISHED";
+    return `<tr>
+      <td title="${esc(c.path)}">${esc(c.proc)}</td>
+      <td class="mono">${c.pid}</td><td>${c.proto}</td>
+      <td class="mono">${esc(c.laddr)}:${c.lport}</td>
+      <td class="mono">${c.raddr==="*"?"—":esc(c.raddr)+":"+c.rport}${c.host?`<div class="muted-host">${esc(c.host)}</div>`:""}</td>
+      <td>${c.class?`<span class="tag ${c.class}">${c.class}</span>`:""}</td>
+      <td class="st-${c.state}">${c.state}</td>
+      <td style="white-space:nowrap">
+        ${killable?`<button class="danger" onclick='killConn(${JSON.stringify(c.kill)})'>kill</button>`:""}
+        ${admin&&c.raddr!=="*"&&c.class!=="loopback"?`<button onclick="blockIp('${esc(c.raddr)}')">block IP</button>`:""}
+        ${admin&&c.path?`<button onclick="blockApp('${esc(c.path).replace(/'/g,"\\'")}')">block app</button>`:""}
+      </td></tr>`;
+  }).join("") || '<tr><td colspan="8" class="empty">No connections match.</td></tr>';
+}
+
+function renderRules(rules, admin){
+  $("#rule-count").textContent = rules.length?rules.length+" active":"none";
+  const tb = $("#rules tbody");
+  if(!rules.length){ tb.innerHTML='<tr><td colspan="5" class="empty">No PrivateFirewall rules. Block an IP or app to create one.</td></tr>'; return; }
+  tb.innerHTML = rules.map(r=>`<tr>
+    <td>${esc(r.name)}</td><td>${esc(r.dir)}</td>
+    <td style="color:${r.action==='Block'||r.action==='4'?'var(--critical)':'var(--good)'}">${esc(actName(r.action))}</td>
+    <td class="mono">${esc(r.remote||r.program||"any")}</td>
+    <td>${admin?`<button onclick="unblock('${esc(r.name).replace(/'/g,"\\'")}')">remove</button>`:""}</td>
+  </tr>`).join("");
+}
+
+// ---- charts (inline SVG) ----
+function drawChart(hist){
+  const svg = $("#chart"), W = svg.clientWidth||900, H = 240;
+  const padL=52, padB=22, padT=8, padR=8;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const n = hist.length;
+  const maxv = Math.max(1000, ...hist.map(p=>Math.max(p.down,p.up)));
+  const nice = niceMax(maxv);
+  const x = i => padL + (n<2?0:i/(n-1)*iw);
+  const y = v => padT + ih - v/nice*ih;
+  const area = key => {
+    if(!n) return "";
+    let d=`M ${x(0)} ${y(0)}`;
+    hist.forEach((p,i)=>d+=` L ${x(i)} ${y(p[key])}`);
+    d+=` L ${x(n-1)} ${y(0)} Z`; return d;
+  };
+  const line = key => hist.map((p,i)=>`${i?'L':'M'} ${x(i)} ${y(p[key])}`).join(" ");
+  let g="";
+  for(let k=0;k<=4;k++){
+    const v=nice*k/4, yy=y(v);
+    g+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="var(--grid)"/>`;
+    g+=`<text x="${padL-6}" y="${yy+3}" text-anchor="end">${fmtBps(v).replace(/\.\d+/,'')}</text>`;
+  }
+  svg.innerHTML = g +
+    `<path d="${area('down')}" fill="var(--down)" fill-opacity="0.10"/>`+
+    `<path d="${area('up')}" fill="var(--up)" fill-opacity="0.10"/>`+
+    `<path d="${line('down')}" fill="none" stroke="var(--down)" stroke-width="2" stroke-linejoin="round"/>`+
+    `<path d="${line('up')}" fill="none" stroke="var(--up)" stroke-width="2" stroke-linejoin="round"/>`+
+    `<line id="cross" y1="${padT}" y2="${padT+ih}" stroke="var(--muted)" stroke-dasharray="3 3" style="opacity:0"/>`+
+    `<rect x="${padL}" y="${padT}" width="${iw}" height="${ih}" fill="transparent"
+       onmousemove="chartHover(event,${nice})" onmouseleave="chartOut()"/>`;
+  svg._geo = {padL,padT,iw,ih,n,nice};
+}
+function chartHover(e,nice){
+  const svg=$("#chart"), g=svg._geo, r=svg.getBoundingClientRect();
+  const rel=(e.clientX-r.left-g.padL)/g.iw;
+  const i=Math.round(Math.max(0,Math.min(1,rel))*(g.n-1));
+  const p=last.history[i]; if(!p) return;
+  const xx=g.padL+(g.n<2?0:i/(g.n-1)*g.iw);
+  const cr=$("#cross"); cr.setAttribute("x1",xx); cr.setAttribute("x2",xx); cr.style.opacity=1;
+  tt.style.opacity=1; tt.style.left=(e.clientX+14)+"px"; tt.style.top=(e.clientY-10)+"px";
+  tt.innerHTML=`▼ ${fmtBps(p.down)}<br>▲ ${fmtBps(p.up)}<br>${p.conns} conns`;
+}
+function chartOut(){ $("#cross").style.opacity=0; tt.style.opacity=0; }
+
+function drawTalkers(conns){
+  // aggregate established public/private connections by process
+  const agg={};
+  conns.forEach(c=>{
+    if(c.state!=="ESTABLISHED"||c.raddr==="*") return;
+    agg[c.proc]=(agg[c.proc]||0)+1;
+  });
+  const items=Object.entries(agg).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const svg=$("#talkers"), W=svg.clientWidth||600, H=200;
+  if(!items.length){ svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle">No active connections</text>`; return;}
+  const max=Math.max(...items.map(i=>i[1]));
+  const rowH=Math.min(24,(H)/items.length), barMax=W-160;
+  svg.innerHTML=items.map(([name,cnt],i)=>{
+    const y=i*rowH, bw=Math.max(2,cnt/max*barMax);
+    const th=Math.min(16,rowH-6);
+    return `<text x="0" y="${y+rowH/2+4}" style="fill:var(--ink-2);font-size:12px">${esc(name).slice(0,18)}</text>`+
+      `<rect x="120" y="${y+(rowH-th)/2}" width="${bw}" height="${th}" rx="4" fill="var(--down)"/>`+
+      `<text x="${120+bw+6}" y="${y+rowH/2+4}" style="fill:var(--ink);font-size:12px">${cnt}</text>`;
+  }).join("");
+  svg.setAttribute("height", items.length*rowH+8);
+}
+
+function niceMax(v){
+  const p=Math.pow(10,Math.floor(Math.log10(v)));
+  const f=v/p;
+  return (f<=1?1:f<=2?2:f<=5?5:10)*p;
+}
+function actName(a){return a==="4"||a==="Block"?"Block":a==="2"||a==="Allow"?"Allow":a;}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// ---- actions ----
+async function killConn(kill){ if(confirm("Terminate this TCP connection?")){await api("/api/kill",{kill});poll();} }
+async function blockIp(ip){ if(confirm("Block ALL traffic to/from "+ip+"?")){await api("/api/block-ip",{ip});poll();} }
+async function blockApp(path){ if(confirm("Block outbound network for:\n"+path+"?")){await api("/api/block-app",{path});poll();} }
+async function unblock(name){ if(confirm("Remove firewall rule:\n"+name+"?")){await api("/api/unblock",{name});poll();} }
+
+$("#block-ip-btn").onclick=()=>{const ip=prompt("IP address to block (in+out):");if(ip)blockIp(ip.trim());};
+$("#lockdown").onclick=async()=>{
+  const on=last&&last.lockdown;
+  const msg=on?"Disable lockdown and allow outbound by default?":
+    "Enable ZERO-TRUST lockdown?\n\nAll outbound traffic is blocked except apps you explicitly allow (DNS + DHCP stay open). This can cut off apps until you allow them.";
+  if(confirm(msg)){await api("/api/lockdown",{enable:!on});poll();}
+};
+$("#ipv6").onclick=async()=>{
+  const on=last&&last.ipv6_blocked;
+  const msg=on?"Re-enable IPv6 on all adapters?":
+    "Block ALL IPv6?\n\nThis unbinds the IPv6 protocol from every network adapter (immediate, no reboot, reversible). Only do this if your network works over IPv4 — some ISPs/services prefer IPv6.";
+  if(confirm(msg)){await api("/api/block-ipv6",{enable:!on});setTimeout(poll,1500);}
+};
+$("#pause").onclick=()=>{paused=!paused;$("#pause").textContent=paused?"▶ resume":"⏸ pause";
+  $("#pause").className=paused?"on":"";if(!paused&&last)render(last);};
+
+// ---- config editor ----
+let cfgDirty=false;
+$("#cfg").addEventListener("input",()=>{cfgDirty=true;});
+function cfgMsg(t,ok){const m=$("#cfg-msg");m.textContent=t;m.className="cfgmsg "+(ok?"ok":"err");}
+async function loadConfig(force){
+  if(cfgDirty && !force) return;               // don't clobber an in-progress edit
+  try{
+    const r=await fetch("/api/config",{headers:{"X-PFW-Token":TOKEN}});
+    const j=await r.json();
+    $("#cfg").value=JSON.stringify(j,null,2);
+    cfgDirty=false; cfgMsg("",true);
+  }catch(e){cfgMsg("could not load config",false);}
+}
+$("#cfg-format").onclick=()=>{
+  try{ $("#cfg").value=JSON.stringify(JSON.parse($("#cfg").value),null,2); cfgMsg("formatted ✓",true); }
+  catch(e){ cfgMsg("invalid JSON: "+e.message,false); }
+};
+$("#cfg-reload").onclick=async()=>{
+  if(!last||!last.admin){cfgMsg("needs admin",false);return;}
+  await api("/api/reload",{}); await loadConfig(true); cfgMsg("reloaded from disk ✓",true);
+};
+$("#cfg-save").onclick=async()=>{
+  if(!last||!last.admin){cfgMsg("needs admin to save",false);return;}
+  let parsed;
+  try{ parsed=JSON.parse($("#cfg").value); }
+  catch(e){ cfgMsg("invalid JSON: "+e.message,false); return; }
+  const j=await api("/api/config",{config:parsed});
+  if(j.ok){ cfgDirty=false; cfgMsg("saved & applied ✓",true); poll(); }
+  else cfgMsg("rejected: "+(j.msg||j.error||"error"),false);
+};
+$("#filter").oninput=()=>last&&renderConns(last.conns,last.admin);
+$("#hide-local").onchange=$("#only-est").onchange=()=>last&&renderConns(last.conns,last.admin);
+document.querySelectorAll("#conns th[data-k]").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k; sortDir=(sortKey===k)?-sortDir:1; sortKey=k;
+  if(last)renderConns(last.conns,last.admin);
+});
+
+poll();
+loadConfig();
+setInterval(poll, 2000);
+</script>

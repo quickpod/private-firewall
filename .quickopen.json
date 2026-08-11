@@ -1,0 +1,11 @@
+{
+  "slug": "private-firewall",
+  "name": "PrivateFirewall",
+  "tagline": "A live control plane and intrusion-alert dashboard on top of the Windows firewall — kill switch, default-deny, connection monitor.",
+  "categorySlug": "security-scanners",
+  "license": "Apache-2.0",
+  "description": "PrivateFirewall is a user-mode control plane and monitoring dashboard layered on the Windows Filtering Platform for a single Windows 10/11 PC. It shows a live view of every active connection, throughput and listening port; provides a kill switch and dynamic block/allow rules; enforces boot-time default-deny-outbound; and runs an intrusion/anomaly alert engine (port scans, brute-force, new listeners, plaintext-DNS bypass, host fan-out, upload surges) with time-boxed auto-blocking. Fail-open by design: the kernel keeps enforcing policy even if the engine stops. Pure Python standard library plus PowerShell — no drivers, no external packages, nothing leaves your machine.",
+  "aiStack": "Python (stdlib, ctypes over WFP/iphlpapi), PowerShell, single-page HTML/JS dashboard",
+  "platforms": ["windows"],
+  "buildEntry": "private_firewall_app.py"
+}
