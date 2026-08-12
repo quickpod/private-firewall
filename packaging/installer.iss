@@ -7,11 +7,12 @@
 ; dashboard.html, README.md, FEATURES.md, LICENSE, quickopen-root.crt.
 
 #define AppName "PrivateFirewall"
-#define AppVersion "1.0.1"
+#define AppVersion "1.0.2"
 #define AppPublisher "QuickOpen (quickopen.ai)"
 #define AppURL "https://quickopen.ai/projects/private-firewall"
 
 [Setup]
+AppMutex=QuickOpen.PrivateFirewall
 AppId={{C4E1F2A9-7B63-4D5E-9A1C-2F8B0D3E4A61}
 AppName={#AppName}
 AppVersion={#AppVersion}
@@ -33,7 +34,7 @@ WizardSmallImageFile=branding\wizard-small.bmp
 AppCopyright=Apache-2.0. 100%% AI-built, published on QuickOpen (quickopen.ai).
 VersionInfoCompany=QuickOpen
 VersionInfoProductName=PrivateFirewall
-VersionInfoVersion=1.0.1.0
+VersionInfoVersion=1.0.2.0
 ; Firewall control requires administrator rights.
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -80,18 +81,3 @@ Type: filesandordirs; Name: "{commonappdata}\PrivateFirewall"
 [Code]
 // On uninstall, offer to also remove the QuickOpen Root CA (opt-in; other
 // QuickOpen apps may rely on it).
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var
-  ResultCode: Integer;
-begin
-  if CurUninstallStep = usUninstall then
-  begin
-    if MsgBox('Also remove the QuickOpen Root CA from the Trusted Root store?' + #13#10 +
-              'Choose No if you use other QuickOpen apps that rely on it.',
-              mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
-    begin
-      Exec('certutil.exe', '-delstore Root "QuickOpen Root CA"',
-           '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
-  end;
-end;

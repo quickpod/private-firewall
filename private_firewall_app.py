@@ -9,6 +9,16 @@ requests admin via its manifest).
 import os
 import sys
 
+# Single-instance marker: the installer's AppMutex checks this to warn the
+# user to close the app before install/uninstall. Harmless off Windows.
+if os.name == "nt":
+    try:
+        import ctypes
+        ctypes.windll.kernel32.CreateMutexW(None, False, "QuickOpen.PrivateFirewall")
+    except Exception:
+        pass
+
+
 # The pfw modules use flat imports (import config, import tray); put pfw on path.
 if getattr(sys, "frozen", False):
     sys.path.insert(0, sys._MEIPASS)  # PyInstaller-bundled modules + dashboard.html
