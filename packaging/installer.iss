@@ -7,7 +7,7 @@
 ; dashboard.html, README.md, FEATURES.md, LICENSE, quickopen-root.crt.
 
 #define AppName "PrivateFirewall"
-#define AppVersion "1.0.4"
+#define AppVersion "1.0.5"
 #define AppPublisher "QuickOpen (quickopen.ai)"
 #define AppURL "https://quickopen.ai/projects/private-firewall"
 
@@ -34,7 +34,7 @@ WizardSmallImageFile=branding\wizard-small.bmp
 AppCopyright=Apache-2.0. 100%% AI-built, published on QuickOpen (quickopen.ai).
 VersionInfoCompany=QuickOpen
 VersionInfoProductName=PrivateFirewall
-VersionInfoVersion=1.0.4.0
+VersionInfoVersion=1.0.5.0
 ; Firewall control requires administrator rights.
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -69,7 +69,16 @@ Name: "{autodesktop}\PrivateFirewall"; Filename: "{app}\PrivateFirewall.exe"; Ic
 [Run]
 Filename: "certutil.exe"; Parameters: "-addstore Root ""{app}\quickopen-root.crt"""; Tasks: trustca; Flags: runhidden; StatusMsg: "Trusting the QuickOpen Root CA..."
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Install-PrivateFirewall.ps1"" -BootLockdown"; Tasks: bootlockdown; Flags: runhidden; StatusMsg: "Arming boot-time default-deny outbound..."
-Filename: "{app}\PrivateFirewall.exe"; Description: "Launch PrivateFirewall now"; Flags: nowait postinstall skipifsilent
+; shellexec is REQUIRED here, not cosmetic. PrivateFirewall.exe is built with
+; --uac-admin (requireAdministrator in its manifest) because it drives the
+; Windows firewall. Inno runs a `postinstall` entry as the ORIGINAL,
+; non-elevated user, and CreateProcess refuses to start an elevation-requiring
+; image from a non-elevated caller — that is exactly "CreateProcess failed;
+; code 740. The requested operation requires elevation." ShellExecuteEx (what
+; shellexec uses) reads the manifest and raises the UAC consent prompt instead,
+; which is the same thing that happens when the user double-clicks the Start
+; menu shortcut. Any future QuickOpen app built with --uac-admin needs this.
+Filename: "{app}\PrivateFirewall.exe"; Description: "Launch PrivateFirewall now (Windows will ask for administrator rights)"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 ; Tear down the firewall rules, scheduled tasks and boot lockdown this app added.
