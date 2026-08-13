@@ -1,44 +1,102 @@
 <title>PrivateFirewall</title>
+<script>
+  /* Apply the saved appearance BEFORE first paint, so a dark-theme reload
+     never flashes a white page. "system" (the default) leaves the attribute
+     off and lets prefers-color-scheme decide, live. */
+  try {
+    var t = localStorage.getItem("pfw-theme");
+    if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
 <style>
+  /* ------------------------------------------------------------------ Aura
+     The QuickOpen design system (branding/aura-design-system, tokens v1.0.0).
+     The app's own semantic names are kept - the rest of this file and every
+     var(--x) inside the SVG chart code go on working unchanged - but their
+     VALUES now come from the Aura palette, defined light-first exactly the way
+     aura.css does it: prefers-color-scheme for the system default, and a
+     [data-theme] attribute for the explicit user override.
+     Per-app accent: #c2410c, PrivateFirewall's icon colour.               */
   :root{
-    color-scheme: dark;
-    --plane:#0d0d0d; --surface:#1a1a19; --surface-2:#222220;
-    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
-    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
-    --down:#3987e5;      /* series 1 blue  = inbound  */
-    --up:#d95926;        /* series 2 orange= outbound */
-    --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
-    --mono:"Cascadia Code",ui-monospace,"Consolas",monospace;
-    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+    color-scheme: light dark;
+    --plane:#f5f7fb; --plane-2:#eef1f6;
+    --surface:#ffffff; --surface-2:#f3f5f9; --surface-3:#e8ecf3;
+    --ink:#1a2130; --ink-2:#5b657a; --muted:#808b9b;
+    --border:#d3d9e6; --border-2:#c8d0dc; --grid:#e8ecf3; --axis:#c8d0dc;
+    --field:#ffffff;
+    --accent:#c2410c; --accent-hover:#a8380a; --accent-soft:#fbece5;
+    --on-accent:#ffffff;
+    --good:#17914b; --warning:#b0700a; --serious:#c2521f; --critical:#cf2d3a;
+    --critical-soft:#fdeaec; --critical-ink:#8f1f29;
+    --down:#3a5fd0;      /* series 1 blue  = inbound  */
+    --up:#c2410c;        /* series 2 orange= outbound */
+    --radius-card:12px; --radius-btn:10px; --radius-input:8px;
+    --mono:ui-monospace,"Cascadia Code","JetBrains Mono","Consolas",
+           "DejaVu Sans Mono",monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --plane:#0f1115; --plane-2:#14171c;
+      --surface:#1a1e24; --surface-2:#222731; --surface-3:#2a3039;
+      --ink:#f1f3f7; --ink-2:#9aa4b2; --muted:#6f7a89;
+      --border:#2b313b; --border-2:#3a424f; --grid:#232932; --axis:#3a424f;
+      --field:#14171c;
+      --accent:#cf6b41; --accent-hover:#dc7f57; --accent-soft:#2b2320;
+      --on-accent:#ffffff;
+      --good:#37c56f; --warning:#f0b429; --serious:#ef8352; --critical:#e5484d;
+      --critical-soft:#2b1b1e; --critical-ink:#ffd9d9;
+      --down:#5b86f7;
+      --up:#e2793f;
+    }
+  }
+  :root[data-theme="dark"]{
+    --plane:#0f1115; --plane-2:#14171c;
+    --surface:#1a1e24; --surface-2:#222731; --surface-3:#2a3039;
+    --ink:#f1f3f7; --ink-2:#9aa4b2; --muted:#6f7a89;
+    --border:#2b313b; --border-2:#3a424f; --grid:#232932; --axis:#3a424f;
+    --field:#14171c;
+    --accent:#cf6b41; --accent-hover:#dc7f57; --accent-soft:#2b2320;
+    --on-accent:#ffffff;
+    --good:#37c56f; --warning:#f0b429; --serious:#ef8352; --critical:#e5484d;
+    --critical-soft:#2b1b1e; --critical-ink:#ffd9d9;
+    --down:#5b86f7;
+    --up:#e2793f;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--plane);color:var(--ink);font-family:var(--sans);
-       font-size:14px;line-height:1.4}
-  a{color:var(--down)}
+       font-size:14px;line-height:1.45}
+  a{color:var(--accent)}
   header{display:flex;align-items:center;gap:16px;padding:14px 20px;
-         border-bottom:1px solid var(--border);position:sticky;top:0;
-         background:var(--plane);z-index:5}
-  header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.02em}
+         position:sticky;top:0;background:var(--plane);z-index:5}
+  header h1{font-size:16px;font-weight:600;margin:0;letter-spacing:.02em;
+             display:flex;align-items:center;gap:9px}
+  header h1 .brand{width:19px;height:19px;flex:none}
+  /* the Aura signature: a 2px accent beam under the header, fading right.
+     Drawn as the header's own ::after so it cannot drift out of alignment
+     when the header grows a row on a narrow window. */
+  header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+     background:linear-gradient(90deg,var(--accent),transparent 85%)}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;
        margin-right:6px;background:var(--muted)}
   .dot.live{background:var(--good);box-shadow:0 0 8px var(--good)}
   .dot.err{background:var(--critical)}
-  .pill{font-size:12px;color:var(--ink-2);padding:3px 9px;border:1px solid var(--border);
-        border-radius:999px;white-space:nowrap}
+  .pill{font-size:12px;color:var(--ink-2);padding:3px 10px;
+        border:1px solid var(--border);border-radius:999px;white-space:nowrap}
   .pill.warn{color:var(--warning);border-color:var(--warning)}
   .grow{flex:1}
   main{padding:20px;max-width:1500px;margin:0 auto}
   .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
-  .tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;
-        padding:14px 16px}
+  .tile{background:var(--surface);border:1px solid var(--border);
+        border-radius:var(--radius-card);padding:14px 16px}
   .tile .lab{font-size:12px;color:var(--muted);margin-bottom:6px}
   .tile .val{font-size:26px;font-weight:600}
   .tile .val small{font-size:14px;color:var(--ink-2);font-weight:400}
   .tile .sub{font-size:12px;color:var(--ink-2);margin-top:3px}
   .grid2{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:16px}
   @media(max-width:1000px){.grid2{grid-template-columns:1fr}}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
-        padding:16px;min-width:0}
+  .card{background:var(--surface);border:1px solid var(--border);
+        border-radius:var(--radius-card);padding:16px;min-width:0}
   .card h2{font-size:13px;font-weight:600;margin:0 0 12px;color:var(--ink-2);
            text-transform:uppercase;letter-spacing:.05em;display:flex;
            align-items:center;gap:8px}
@@ -47,7 +105,8 @@
   .legend span{display:inline-flex;align-items:center;gap:6px}
   .swatch{width:20px;height:3px;border-radius:2px;display:inline-block}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
-  th{text-align:left;color:var(--muted);font-weight:500;padding:6px 8px;
+  th{text-align:left;color:var(--muted);font-weight:600;letter-spacing:.04em;
+     text-transform:uppercase;font-size:11px;padding:8px;
      position:sticky;top:0;background:var(--surface);cursor:pointer;user-select:none;
      border-bottom:1px solid var(--border);white-space:nowrap}
   td{padding:6px 8px;border-bottom:1px solid var(--grid);vertical-align:top}
@@ -58,20 +117,29 @@
   .tag.private{color:var(--ink-2)} .tag.loopback{color:var(--muted)}
   .st-ESTABLISHED{color:var(--good)} .st-LISTEN{color:var(--warning)}
   .st-TIME_WAIT,.st-CLOSE_WAIT,.st-SYN_SENT{color:var(--muted)}
-  button{font-family:var(--sans);font-size:12px;cursor:pointer;border-radius:6px;
-         border:1px solid var(--border);background:var(--surface-2);color:var(--ink);
-         padding:4px 10px}
-  button:hover{border-color:var(--muted)}
+  button{font-family:var(--sans);font-size:12px;cursor:pointer;
+         border-radius:var(--radius-btn);border:1px solid var(--border-2);
+         background:var(--surface-2);color:var(--ink);padding:5px 12px}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   button.danger{color:var(--critical);border-color:var(--critical)}
-  button.danger:hover{background:var(--critical);color:#fff}
-  button.on{background:var(--good);color:#04240b;border-color:var(--good);font-weight:600}
+  button.danger:hover{background:var(--critical);color:#fff;border-color:var(--critical)}
+  /* the one primary action per view, in the Aura accent */
+  button.on{background:var(--accent);color:var(--on-accent);
+            border-color:var(--accent);font-weight:600}
+  button.on:hover{background:var(--accent-hover);border-color:var(--accent-hover);
+                  color:var(--on-accent)}
   .scroll{max-height:360px;overflow:auto}
-  .alert{display:flex;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:8px;
+  .alert{display:flex;gap:10px;padding:10px 12px;
+         border-radius:var(--radius-input);margin-bottom:8px;
          background:var(--surface-2);border-left:3px solid var(--muted)}
   .alert.critical{border-left-color:var(--critical)}
   .alert.serious{border-left-color:var(--serious)}
   .alert.warning{border-left-color:var(--warning)}
-  .alert .ic{font-size:16px;line-height:1.2}
+  .alert .ic{font-size:15px;line-height:1.3;color:var(--muted)}
+  .alert.critical .ic{color:var(--critical)}
+  .alert.serious .ic{color:var(--serious)}
+  .alert.warning .ic{color:var(--warning)}
   .alert .t{font-weight:600} .alert .d{color:var(--ink-2);font-size:12px;margin-top:2px}
   .alert .when{color:var(--muted);font-size:11px;margin-top:3px}
   .feed{font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
@@ -81,39 +149,54 @@
   .feed .action{color:var(--down)} .feed .error{color:var(--critical)}
   .feed .when{color:var(--muted)}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-  .toolbar input{font-family:var(--mono);font-size:12px;background:var(--surface-2);
-    border:1px solid var(--border);border-radius:6px;color:var(--ink);padding:5px 9px}
+  .toolbar input{font-family:var(--mono);font-size:12px;background:var(--field);
+    border:1px solid var(--border);border-radius:var(--radius-input);
+    color:var(--ink);padding:6px 10px}
+  .toolbar input:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 1px var(--accent)}
   .empty{color:var(--muted);padding:16px;text-align:center;font-size:12px}
   .muted-host{color:var(--muted);font-size:11px}
-  textarea{width:100%;min-height:340px;background:var(--surface-2);color:var(--ink);
-    border:1px solid var(--border);border-radius:8px;padding:12px;font-family:var(--mono);
-    font-size:12px;line-height:1.5;resize:vertical}
+  textarea{width:100%;min-height:340px;background:var(--field);color:var(--ink);
+    border:1px solid var(--border);border-radius:var(--radius-input);padding:12px;
+    font-family:var(--mono);font-size:12px;line-height:1.5;resize:vertical}
+  textarea:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 1px var(--accent)}
   .cfgbar{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
   .cfgmsg{font-size:12px}
   .cfgmsg.ok{color:var(--good)} .cfgmsg.err{color:var(--critical)}
   .profile-pill{font-weight:600}
-  .banner{background:#3a1414;border:1px solid var(--critical);color:#ffd9d9;
-          padding:10px 16px;border-radius:8px;margin-bottom:16px;font-size:13px}
-  .tt{position:fixed;pointer-events:none;background:#000;border:1px solid var(--border);
-      border-radius:6px;padding:6px 9px;font-size:12px;font-family:var(--mono);
-      z-index:20;opacity:0;transition:opacity .08s;white-space:nowrap}
+  .banner{background:var(--critical-soft);border:1px solid var(--critical);
+          color:var(--critical-ink);padding:10px 16px;
+          border-radius:var(--radius-input);margin-bottom:16px;font-size:13px}
+  .tt{position:fixed;pointer-events:none;background:var(--surface-2);
+      color:var(--ink);border:1px solid var(--border);
+      border-radius:var(--radius-input);padding:6px 9px;font-size:12px;
+      font-family:var(--mono);z-index:20;opacity:0;transition:opacity .08s;
+      white-space:nowrap}
   svg text{fill:var(--muted);font-size:10px;font-family:var(--sans)}
+  /* appearance control, right of the header */
+  #theme{font-size:12px}
 </style>
 
 <header>
-  <h1>🛡 PrivateFirewall</h1>
+  <h1><svg class="brand" viewBox="0 0 24 24" fill="none" stroke="var(--accent)"
+        stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"
+        aria-hidden="true"><path d="M12 3 4.5 6.2v5.4c0 4.6 3.1 8.3 7.5 9.4
+        4.4-1.1 7.5-4.8 7.5-9.4V6.2L12 3Z"/><path d="m8.8 12.2 2.3 2.3
+        4.1-4.6"/></svg>PrivateFirewall</h1>
   <span id="live"><span class="dot"></span><span id="livetxt">connecting…</span></span>
   <span class="pill" id="net">—</span>
   <span class="pill profile-pill" id="profile">—</span>
   <span class="pill" id="adminpill">—</span>
   <span class="grow"></span>
   <span class="pill" id="uptime">—</span>
-  <button id="pause">⏸ pause</button>
+  <button id="theme" title="System / Dark / Light">Theme: System</button>
+  <button id="pause">Pause</button>
 </header>
 
 <main>
   <div id="adminbanner" class="banner" style="display:none">
-    ⚠ Engine is running <b>unelevated</b> — the dashboard is read-only. Kill, block
+    \u26A0 Engine is running <b>unelevated</b> — the dashboard is read-only. Kill, block
     and lockdown controls need admin. Relaunch with
     <span class="mono">Start-PrivateFirewall.ps1</span>.
   </div>
@@ -172,7 +255,7 @@
       <label class="pill"><input type="checkbox" id="hide-local"> hide loopback</label>
       <label class="pill"><input type="checkbox" id="only-est"> established only</label>
       <span class="grow"></span>
-      <button id="block-ip-btn">⛔ block an IP…</button>
+      <button id="block-ip-btn">Block an IP…</button>
     </div>
     <div class="scroll" style="max-height:460px">
       <table id="conns">
@@ -267,7 +350,7 @@ async function poll(){
   }
 }
 
-const SEV_ICON = {critical:"⛔",serious:"🔺",warning:"⚠",good:"✓"};
+const SEV_ICON = {critical:"\u2716",serious:"\u25B2",warning:"\u26A0",good:"\u2713"};
 const ICONS = {connect:"→",drop:"✗",action:"⚙",error:"!",listen:"◉"};
 
 function render(d){
@@ -290,10 +373,10 @@ function render(d){
   const crit = d.alerts.filter(a=>a.severity==="critical").length;
   $("#t-alerts-sub").textContent = crit?crit+" critical":"none critical";
   $("#t-alerts-sub").style.color = crit?"var(--critical)":"";
-  $("#t-policy").textContent = d.lockdown?"🔒 lockdown":"allow";
+  $("#t-policy").textContent = d.lockdown?"lockdown":"allow";
   $("#t-policy").style.color = d.lockdown?"var(--good)":"var(--ink-2)";
   $("#lockdown").className = d.lockdown?"on":"";
-  $("#t-ipv6").textContent = d.ipv6_blocked?"⛔ blocked":"allowed";
+  $("#t-ipv6").textContent = d.ipv6_blocked?"blocked":"allowed";
   $("#t-ipv6").style.color = d.ipv6_blocked?"var(--good)":"var(--ink-2)";
   $("#ipv6").className = d.ipv6_blocked?"on":"";
   $("#ipv6").textContent = d.ipv6_blocked?"allow IPv6":"block all IPv6";
@@ -485,8 +568,33 @@ $("#ipv6").onclick=async()=>{
     "Block ALL IPv6?\n\nThis unbinds the IPv6 protocol from every network adapter (immediate, no reboot, reversible). Only do this if your network works over IPv4 — some ISPs/services prefer IPv6.";
   if(confirm(msg)){await api("/api/block-ipv6",{enable:!on});setTimeout(poll,1500);}
 };
-$("#pause").onclick=()=>{paused=!paused;$("#pause").textContent=paused?"▶ resume":"⏸ pause";
+$("#pause").onclick=()=>{paused=!paused;$("#pause").textContent=paused?"Resume":"Pause";
   $("#pause").className=paused?"on":"";if(!paused&&last)render(last);};
+
+// ---- appearance: System -> Dark -> Light ----
+// "system" is the default and removes the attribute entirely, so the page
+// follows the desktop's light/dark live - the same contract the Aura desktop
+// apps have. An explicit choice is remembered for this browser only; nothing
+// about appearance goes near the engine or its config.
+const THEMES=["system","dark","light"];
+function themePref(){
+  try{const t=localStorage.getItem("pfw-theme");return THEMES.includes(t)?t:"system";}
+  catch(e){return "system";}
+}
+function applyTheme(t){
+  if(t==="system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme=t;
+  $("#theme").textContent="Theme: "+t[0].toUpperCase()+t.slice(1);
+  // the chart is drawn as SVG with var(--x) fills, so it re-themes itself on
+  // the next poll; redraw the cached frame now rather than waiting a second.
+  if(last) render(last);
+}
+$("#theme").onclick=()=>{
+  const next=THEMES[(THEMES.indexOf(themePref())+1)%THEMES.length];
+  try{localStorage.setItem("pfw-theme",next);}catch(e){}
+  applyTheme(next);
+};
+applyTheme(themePref());
 
 // ---- config editor ----
 let cfgDirty=false;
