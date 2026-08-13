@@ -180,6 +180,11 @@ Python (for building, or source-mode runtime) is expected at
   PID, local/remote, scope tag (public/private/loopback), state; sortable and
   filterable; hide-loopback / established-only toggles.
 - **Live event feed:** new connections, firewall drops, and control actions.
+- **Aura light & dark:** the QuickOpen design system, same palette and accent
+  beam as every other QuickOpen app. Follows the browser/desktop light-dark
+  setting by default; the **Theme** button in the header pins
+  *System / Dark / Light* (remembered in that browser, never sent to the
+  engine).
 
 ### Controls (require elevation)
 - **Kill** an established TCP/IPv4 connection (`SetTcpEntry` DELETE_TCB).
