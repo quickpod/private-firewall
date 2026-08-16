@@ -38,9 +38,9 @@ class BackgroundClassificationTests(unittest.TestCase):
 
     def test_multicast_dst_is_background(self):
         self.assertTrue(server.is_background_drop(
-            drop("192.168.1.20", dst="ff02::1")))
+            drop("172.16.0.20", dst="ff02::1")))
         self.assertTrue(server.is_background_drop(
-            drop("192.168.1.20", dst="239.255.255.250")))
+            drop("172.16.0.20", dst="239.255.255.250")))
 
     def test_icmpv6_igmp_are_background(self):
         self.assertTrue(server.is_background_drop(
@@ -63,7 +63,7 @@ class BackgroundClassificationTests(unittest.TestCase):
         self.assertEqual(server.mac_from_eui64("fe80::b481:43ff:fe10:603d"),
                          "b6:81:43:10:60:3d")
         self.assertEqual(server.mac_from_eui64("fe80::1"), "")
-        self.assertEqual(server.mac_from_eui64("192.168.1.1"), "")
+        self.assertEqual(server.mac_from_eui64("172.16.0.1"), "")
 
 
 class AlertGatingTests(unittest.TestCase):
@@ -107,7 +107,7 @@ class AlertGatingTests(unittest.TestCase):
 
     def test_describe_source_router(self):
         self.assertIn("your router",
-                      self.eng.describe_source("10.0.0.1"))   # fake gateway
+                      self.eng.describe_source("172.16.0.1"))  # fake gateway
 
     def test_describe_source_lan_device_with_mac(self):
         txt = self.eng.describe_source("fe80::b481:43ff:fe10:603d")

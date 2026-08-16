@@ -58,9 +58,9 @@ class FakeBackend(FirewallBackend):
 
     def snapshot_connections(self):
         return [{"proto": "TCP", "pid": 42, "proc": "fake", "path": "/bin/fake",
-                 "laddr": "10.0.0.5", "lport": 5555, "raddr": "93.184.216.34",
+                 "laddr": "172.16.0.5", "lport": 5555, "raddr": "93.184.216.34",
                  "rport": 443, "state": "ESTABLISHED",
-                 "kill": ["10.0.0.5", 5555, "93.184.216.34", 443]}]
+                 "kill": ["172.16.0.5", 5555, "93.184.216.34", 443]}]
 
     def snapshot_throughput(self):
         return 1000.0, 2000.0, ["fake0"]
@@ -68,7 +68,7 @@ class FakeBackend(FirewallBackend):
     def refresh_status(self):
         return {"rules": list(self.rules), "lockdown": False,
                 "ipv6_blocked": False, "log_blocked": True, "fw_active": True,
-                "dns_names": {}, "gateway": "10.0.0.1", "neighbors": {},
+                "dns_names": {}, "gateway": "172.16.0.1", "neighbors": {},
                 "profiles": [], "connection": [], "defaults": {}, "error": ""}
 
     def read_new_drops(self):
@@ -212,7 +212,7 @@ class ApiTests(unittest.TestCase):
 
     def test_kill_dispatch(self):
         code, d = self._req("/api/kill",
-                            {"kill": ["10.0.0.5", 5555, "93.184.216.34", 443]})
+                            {"kill": ["172.16.0.5", 5555, "93.184.216.34", 443]})
         self.assertTrue(d["ok"])
 
     def test_unsupported_maps_to_400(self):

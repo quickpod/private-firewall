@@ -111,8 +111,8 @@ class StatusParseTests(unittest.TestCase):
                        "remote": "1.2.3.4", "program": None}],
             "ipv6": [{"Name": "Ethernet", "Enabled": False}],
             "dns": [{"Entry": "example.com", "Data": "93.184.216.34"}],
-            "gateway": ["192.168.1.1"],
-            "neighbors": [{"IPAddress": "192.168.1.1",
+            "gateway": ["172.16.0.1"],
+            "neighbors": [{"IPAddress": "172.16.0.1",
                            "LinkLayerAddress": "aa-bb-cc-dd-ee-ff"}],
         }
         try:
@@ -124,7 +124,7 @@ class StatusParseTests(unittest.TestCase):
         self.assertTrue(st["ipv6_blocked"])
         self.assertTrue(st["log_blocked"])
         self.assertEqual(st["connection"][0]["category"], "Public")
-        self.assertEqual(st["gateway"], "192.168.1.1")
+        self.assertEqual(st["gateway"], "172.16.0.1")
         self.assertEqual(st["dns_names"]["93.184.216.34"], "example.com")
         self.assertTrue(st["rules"][0]["ours"])
         self.assertEqual(st["error"], "")

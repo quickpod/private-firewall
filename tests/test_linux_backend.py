@@ -48,13 +48,13 @@ UFW_LOG = (
 PROC_TCP = """\
   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 0100007F:E5F3 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 12345 1
-   1: 0501A8C0:15B3 0765700A:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 67890 1
+   1: 050010AC:15B3 070910AC:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 67890 1
 """
 
 PROC_ROUTE = """\
 Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT
-ens33\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0
-ens33\t0001A8C0\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0
+ens33\t00000000\t010010AC\t0003\t0\t0\t100\t00000000\t0\t0\t0
+ens33\t000010AC\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0
 """
 
 
@@ -109,14 +109,14 @@ class ProcNetParserTests(unittest.TestCase):
         self.assertEqual(state, "LISTEN")
         self.assertEqual(inode, "12345")
         laddr, lport, raddr, rport, state, inode = rows[1]
-        self.assertEqual(laddr, "192.168.1.5")
-        self.assertEqual(raddr, "10.112.101.7")
+        self.assertEqual(laddr, "172.16.0.5")
+        self.assertEqual(raddr, "172.16.9.7")
         self.assertEqual(rport, 443)
         self.assertEqual(state, "ESTABLISHED")
 
     def test_gateway(self):
         gw = backend_linux.parse_route_gateway(PROC_ROUTE)
-        self.assertEqual(gw, "192.168.1.1")
+        self.assertEqual(gw, "172.16.0.1")
 
 
 class BackendActionValidationTests(unittest.TestCase):
