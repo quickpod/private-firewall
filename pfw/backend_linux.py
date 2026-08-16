@@ -799,7 +799,8 @@ class LinuxBackend(FirewallBackend):
     @staticmethod
     def _instance_url_path():
         run_dir = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-        return os.path.join(run_dir, f"private-firewall-{os.getuid()}.url")
+        uid = os.getuid() if hasattr(os, "getuid") else "u"   # tests on Windows
+        return os.path.join(run_dir, f"private-firewall-{uid}.url")
 
     def publish_instance_url(self, url):
         """0600 file in the user-private runtime dir: same trust domain as
