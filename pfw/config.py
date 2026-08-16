@@ -67,6 +67,14 @@ DEFAULT_CONFIG = {
                     "note": "Managed corporate network."},
     },
 
+    # --- start at login (tray only, no window) ------------------------------
+    # None = "never decided": a fresh install must NOT autostart. The first
+    # successful elevation (= the user actually set the app up) flips this to
+    # True; the Settings panel toggles it thereafter. The autostarted app is
+    # the monitoring/control surface only — ufw/WFP enforce from boot
+    # regardless of whether the app is running.
+    "autostart": {"enabled": None},
+
     # --- allow/deny lists ---------------------------------------------------
     # Trusted IPs are never alerted on or auto-blocked (loopback + your gateway
     # style hosts). Add your home subnet if you like, e.g. "192.168.1.0/24".
@@ -156,6 +164,13 @@ def validate(cfg):
             prof["auto_block"] = bool(prof.get("auto_block", True))
         if not isinstance(merged["trusted_ips"], list):
             return False, None, "trusted_ips must be a list"
+        au = merged.get("autostart", {})
+        if not isinstance(au, dict):
+            return False, None, "autostart must be an object"
+        en = au.get("enabled", None)
+        if en is not None:
+            au["enabled"] = bool(en)
+        merged["autostart"] = {"enabled": au.get("enabled", None)}
     except (KeyError, ValueError, TypeError) as e:
         return False, None, f"invalid config: {e}"
     return True, merged, ""

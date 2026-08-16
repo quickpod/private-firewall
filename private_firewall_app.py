@@ -30,9 +30,12 @@ import server  # noqa: E402  (resolved via the path insert / bundled modules)
 
 def main():
     # Default to tray + open-dashboard when launched with no explicit flags.
+    # --no-open (the start-at-login entry) keeps it tray-only: no window at
+    # login — the OS firewall enforces from boot either way, the app is the
+    # monitoring surface.
     if "--tray" not in sys.argv:
         sys.argv.append("--tray")
-    if "--open" not in sys.argv:
+    if "--open" not in sys.argv and "--no-open" not in sys.argv:
         sys.argv.append("--open")
     return server.main()
 

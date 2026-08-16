@@ -412,11 +412,31 @@ class State:
         ok, cleaned, err = cfgmod.validate(cfg)
         if not ok:
             return False, err
-        cfgmod.save_config(CONFIG_PATH, cleaned)
+        prev_auto = self.config.get("autostart", {}).get("enabled", None)
+        try:
+            cfgmod.save_config(CONFIG_PATH, cleaned)
+        except OSError as e:
+            return False, f"could not write config: {e}"
         self.config = cleaned
         self.config_mtime = self._cfg_mtime()
         self._emit_event("action", "config saved from dashboard")
+        new_auto = cleaned.get("autostart", {}).get("enabled", None)
+        if new_auto is not None and new_auto != prev_auto:
+            ok_a, msg_a = self.backend.set_autostart(bool(new_auto))
+            self._emit_event("action",
+                             f"start-at-login {'ON' if new_auto else 'OFF'} "
+                             f"({msg_a})")
         return True, "saved"
+
+    def note_elevated(self):
+        """First successful elevation = the user has genuinely set the app
+        up: default start-at-login ON (owner directive). Never flips a value
+        the user has already decided, and never fires on a fresh install
+        that was never elevated."""
+        if self.config.get("autostart", {}).get("enabled", None) is None:
+            cfg = json.loads(json.dumps(self.config))
+            cfg["autostart"]["enabled"] = True
+            self.save_config(cfg)
 
     def _hot_reload_if_changed(self):
         m = self._cfg_mtime()
@@ -742,13 +762,26 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, STATE.config_json())
         return self._send(404, '{"error":"not found"}')
 
+    # endpoints that only touch the per-user config file — never privileged
+    UNPRIVILEGED = ("/api/config", "/api/reload", "/api/elevate")
+
     def do_POST(self):
         if not self._authed():
             return self._send(401, '{"error":"bad token"}')
-        if not STATE.backend.is_admin() and self.path != "/api/elevate":
-            hint = STATE.caps.get("elevate_hint", "restart elevated")
-            return self._send(403, json.dumps(
-                {"error": f"server not elevated — {hint}"}))
+        if not STATE.backend.is_admin() and self.path not in self.UNPRIVILEGED:
+            # deferred elevation: no prompt at login — the FIRST action that
+            # actually needs privileges raises the system prompt, right here,
+            # then the helper stays for the session.
+            if STATE.caps.get("elevate_live"):
+                ok, _msg = STATE.backend.elevate()
+                if ok:
+                    STATE.note_elevated()
+                    threading.Thread(target=STATE.refresh_fw,
+                                     daemon=True).start()
+            if not STATE.backend.is_admin():
+                hint = STATE.caps.get("elevate_hint", "restart elevated")
+                return self._send(403, json.dumps(
+                    {"error": f"server not elevated — {hint}"}))
         try:
             n = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(n) or b"{}")
@@ -782,6 +815,7 @@ class Handler(BaseHTTPRequestHandler):
             ok, msg = b.elevate()
             STATE._emit_event("action", f"elevate requested: {msg}")
             if ok:
+                STATE.note_elevated()
                 threading.Thread(target=STATE.refresh_fw, daemon=True).start()
             return ok, msg
         if path == "/api/block-ip":
@@ -828,25 +862,33 @@ def main():
     state = init_state()
     backend = state.backend
     if not backend.acquire_single_instance():
-        print("PrivateFirewall is already running; this instance will exit.",
-              flush=True)
+        # menu-launch safety net: never a dead click — hand the user the
+        # already-running dashboard instead of silently exiting
+        if backend.activate_existing():
+            print("PrivateFirewall is already running — opened the existing "
+                  "dashboard.", flush=True)
+        else:
+            print("PrivateFirewall is already running; this instance will "
+                  "exit.", flush=True)
         return
 
-    # Linux: gain admin via ONE polkit authorization per session (the UAC
-    # analog). Runs in the background so the dashboard is up immediately; if
-    # declined, the dashboard offers an "Enable admin" button.
-    if state.caps.get("elevate_live") and not os.environ.get("PFW_NO_ELEVATE"):
-        def _elevate():
-            ok, msg = backend.elevate()
-            state._emit_event("action", f"startup elevation: {msg}")
-            state.refresh_fw()
-        threading.Thread(target=_elevate, daemon=True).start()
-    else:
-        threading.Thread(target=state.refresh_fw, daemon=True).start()
+    # Deferred elevation (owner directive): NEVER prompt at login/launch.
+    # The engine starts fully functional read-only — connections, throughput,
+    # drop feed and the unprivileged firewall status are all readable without
+    # root — and the FIRST privileged action (rule add/remove, lockdown,
+    # kill...) raises the system prompt via do_POST, once per session.
+    threading.Thread(target=state.refresh_fw, daemon=True).start()
+
+    # start-at-login repair: keep the login entry consistent with the saved
+    # preference (e.g. after an OS reinstall the config survives in $HOME)
+    auto = state.config.get("autostart", {}).get("enabled", None)
+    if auto is not None:
+        backend.set_autostart(bool(auto))
 
     threading.Thread(target=state.loop, daemon=True).start()
     srv = ThreadingHTTPServer((BIND_HOST, BIND_PORT), Handler)
     url = f"http://{BIND_HOST}:{BIND_PORT}/#t={TOKEN}"
+    backend.publish_instance_url(url)
     print(f"PrivateFirewall engine  admin={backend.is_admin()}  {url}",
           flush=True)
 

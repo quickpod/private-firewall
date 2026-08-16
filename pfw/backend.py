@@ -121,6 +121,21 @@ class FirewallBackend:
     def acquire_single_instance(self):
         return True
 
+    def publish_instance_url(self, url):
+        """Record where the running engine's dashboard lives so a second
+        launch can hand the user the EXISTING dashboard (menu-launch safety
+        net when there is no tray). Default: no-op."""
+
+    def set_autostart(self, enabled):
+        """Install/remove a start-at-login entry (tray only, no window).
+        Returns (ok, msg). Default: unsupported no-op."""
+        return False, "autostart not supported on this platform"
+
+    def activate_existing(self):
+        """Called when acquire_single_instance() failed: raise/show the
+        already-running instance. Returns True when something was opened."""
+        return False
+
     def open_external(self, path):
         raise NotImplementedError
 

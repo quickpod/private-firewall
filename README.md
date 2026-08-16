@@ -132,6 +132,17 @@ ufw stays exactly as your OS shipped it: enabled, deny-incoming,
 allow-outgoing, SSH allowed. The app coexists with rules you (or the OS) made —
 they are listed as *system* and cannot be touched from the app.
 
+**Tray + start at login.** The app puts a shield in the system tray (green dot:
+protection active; red: the system firewall is off) with Open Dashboard /
+notifications toggle / Quit. After the first successful elevation it registers
+an XDG autostart entry (`--tray --no-open`): at login you get the tray only, no
+window, and **no password prompt** — the engine starts read-only and the first
+action that actually modifies the firewall raises the polkit prompt, once per
+session. Toggle in Settings → "start at login". Enforcement never depends on
+the app: ufw enforces from boot whether or not the app is running. Launching
+the app while it is already running raises the existing dashboard instead of
+dying silently.
+
 ---
 
 ## Install — Windows

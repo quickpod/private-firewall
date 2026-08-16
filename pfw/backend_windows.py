@@ -585,3 +585,48 @@ class WindowsBackend(FirewallBackend):
 
     def suspicious_path_re(self):
         return SUSPICIOUS_PATH_WIN
+
+    # -- start at login ------------------------------------------------------
+    @staticmethod
+    def _has_logon_task():
+        """The installer's scheduled task (elevated tray + watchdog) is the
+        preferred Windows autostart; when it exists the Run key must NOT be
+        added on top of it (the mutex would make the second launch a no-op,
+        but two mechanisms is one too many)."""
+        try:
+            p = subprocess.run(["schtasks", "/Query", "/TN", "PrivateFirewall"],
+                               capture_output=True, timeout=15,
+                               creationflags=CREATE_NO_WINDOW)
+            return p.returncode == 0
+        except OSError:
+            return False
+
+    def set_autostart(self, enabled):
+        """Per-user Run key fallback for installs without the scheduled task.
+        Only meaningful for the frozen exe (source-mode users have the
+        PowerShell installer for this)."""
+        if self._has_logon_task():
+            return True, "autostart already handled by the logon task"
+        if not getattr(sys, "frozen", False):
+            return False, "source mode: use Setup-PrivateFirewall.ps1 -Startup"
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run", 0,
+                winreg.KEY_SET_VALUE)
+            try:
+                if enabled:
+                    winreg.SetValueEx(
+                        key, "PrivateFirewall", 0, winreg.REG_SZ,
+                        f'"{sys.executable}" --tray --no-open')
+                else:
+                    try:
+                        winreg.DeleteValue(key, "PrivateFirewall")
+                    except FileNotFoundError:
+                        pass
+            finally:
+                winreg.CloseKey(key)
+        except OSError as e:
+            return False, str(e)
+        return True, "autostart " + ("enabled" if enabled else "removed")

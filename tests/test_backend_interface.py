@@ -219,17 +219,61 @@ class ApiTests(unittest.TestCase):
         code, d = self._req("/api/block-app", {"path": "/bin/true"})
         self.assertEqual(code, 400)   # fake has no app_rules -> Unsupported
 
-    def test_unelevated_is_read_only_but_can_elevate(self):
+    def test_unelevated_privileged_action_elevates_on_demand(self):
+        """Deferred elevation: the first privileged action raises the (fake)
+        system prompt and then proceeds — no prompt needed at launch."""
         self.fake.admin = False
         try:
             code, d = self._req("/api/block-ip", {"ip": "203.0.113.6"})
-            self.assertEqual(code, 403)
-            code, d = self._req("/api/elevate", {})
             self.assertEqual(code, 200)
             self.assertTrue(d["ok"])
-            self.assertTrue(self.fake.admin)
+            self.assertTrue(self.fake.admin)      # elevate() was invoked
+            self.assertIn(("block_ip", "203.0.113.6", None), self.fake.calls)
         finally:
             self.fake.admin = True
+
+    def test_declined_elevation_is_403(self):
+        self.fake.admin = False
+        orig = self.fake.elevate
+        self.fake.elevate = lambda: (False, "declined")
+        try:
+            code, d = self._req("/api/kill",
+                                {"kill": ["172.16.0.5", 5555,
+                                          "93.184.216.34", 443]})
+            self.assertEqual(code, 403)
+        finally:
+            self.fake.elevate = orig
+            self.fake.admin = True
+
+    def test_config_save_needs_no_elevation(self):
+        self.fake.admin = False
+        orig = self.fake.elevate
+        self.fake.elevate = lambda: (False, "declined")
+        try:
+            code, d = self._req("/api/config",
+                                {"config": {"poll_secs": 3}})
+            self.assertEqual(code, 200)
+            self.assertTrue(d["ok"])
+        finally:
+            self.fake.elevate = orig
+            self.fake.admin = True
+
+    def test_first_elevation_defaults_autostart_on(self):
+        st = server.STATE
+        st.config["autostart"]["enabled"] = None
+        seen = []
+        orig = self.fake.set_autostart
+        self.fake.set_autostart = lambda en: (seen.append(en) or (True, "ok"))
+        try:
+            st.note_elevated()
+            self.assertEqual(st.config["autostart"]["enabled"], True)
+            self.assertEqual(seen, [True])
+            # a user decision is never overridden
+            st.config["autostart"]["enabled"] = False
+            st.note_elevated()
+            self.assertEqual(st.config["autostart"]["enabled"], False)
+        finally:
+            self.fake.set_autostart = orig
 
 
 if __name__ == "__main__":

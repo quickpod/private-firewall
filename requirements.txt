@@ -9,3 +9,4 @@
 # Win32 tray). The QuickOpen deb builder maps it to python3-pil; pystray
 # itself is vendored by quickopen-runtime.
 Pillow  # Linux tray icon only (deb: python3-pil); import-guarded
+pystray  # Linux tray (vendored by quickopen-runtime; deb maps to the AppIndicator GIR typelibs)

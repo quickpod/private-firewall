@@ -342,6 +342,7 @@
             <option>critical</option></select></label>
         <label class="pill"><input type="checkbox" id="nf-int" checked> internet sources</label>
         <label class="pill"><input type="checkbox" id="nf-loc"> local-network sources</label>
+        <label class="pill" title="Tray only at login — the system firewall enforces from boot either way"><input type="checkbox" id="au-on"> start at login</label>
         <button id="nf-save" class="on">Apply</button>
         <span class="cfgmsg" id="nf-msg"></span>
       </div>
@@ -466,6 +467,24 @@
       <li>Even with notifications on, link-local / ICMPv6 / multicast
       background traffic stays below the alert line — it is classified as
       background, never as an attack.</li>
+    </ul>
+
+    <h3>Start at login &amp; the tray</h3>
+    <ul>
+      <li>After you first set the app up (the first time it gains admin), it
+      <b>starts at login automatically — tray icon only, no window</b>. Toggle
+      this in Settings → “start at login”.</li>
+      <li><b>Enforcement never depends on the app.</b> The system firewall
+      (ufw / Windows Firewall) enforces your rules from boot whether or not
+      Private Firewall is running; the autostarted app is the monitoring and
+      control surface. The tray dot shows the real state: green = protection
+      active, red = the system firewall is off.</li>
+      <li><b>No password prompt at login.</b> The app starts in read-only
+      monitoring mode; the first action that actually changes the firewall
+      (add/remove rule, lockdown, kill) raises the system authorization
+      prompt, once per session.</li>
+      <li>Launching the app again while it is running simply brings up the
+      existing dashboard — from the tray, use <i>Open Dashboard</i>.</li>
     </ul>
 
     <h3>Troubleshooting</h3>
@@ -866,12 +885,12 @@ async function loadConfig(force){
     const cats=nf.categories||{};
     $("#nf-int").checked=cats.internet!==false;
     $("#nf-loc").checked=!!cats.local;
+    $("#au-on").checked=!!(j.autostart&&j.autostart.enabled);
     cfgDirty=false; cfgMsg("",true);
   }catch(e){cfgMsg("could not load config",false);}
 }
 function nfMsg(t,ok){const m=$("#nf-msg");m.textContent=t;m.className="cfgmsg "+(ok?"ok":"err");}
 $("#nf-save").onclick=async()=>{
-  if(!last||!last.admin){nfMsg("needs admin",false);return;}
   try{
     const r=await fetch("/api/config",{headers:{"X-PFW-Token":TOKEN}});
     const cfg=await r.json();
@@ -879,6 +898,7 @@ $("#nf-save").onclick=async()=>{
       enabled:$("#nf-on").checked,
       min_severity:$("#nf-sev").value,
       categories:{internet:$("#nf-int").checked,local:$("#nf-loc").checked}});
+    cfg.autostart=Object.assign({},cfg.autostart,{enabled:$("#au-on").checked});
     const j=await api("/api/config",{config:cfg});
     if(j.ok){nfMsg($("#nf-on").checked?"notifications on ✓":"notifications off ✓",true);
       await loadConfig(true); poll();}
@@ -890,11 +910,9 @@ $("#cfg-format").onclick=()=>{
   catch(e){ cfgMsg("invalid JSON: "+e.message,false); }
 };
 $("#cfg-reload").onclick=async()=>{
-  if(!last||!last.admin){cfgMsg("needs admin",false);return;}
   await api("/api/reload",{}); await loadConfig(true); cfgMsg("reloaded from disk ✓",true);
 };
 $("#cfg-save").onclick=async()=>{
-  if(!last||!last.admin){cfgMsg("needs admin to save",false);return;}
   let parsed;
   try{ parsed=JSON.parse($("#cfg").value); }
   catch(e){ cfgMsg("invalid JSON: "+e.message,false); return; }

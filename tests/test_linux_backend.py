@@ -198,6 +198,83 @@ class BackendActionValidationTests(unittest.TestCase):
         self.assertTrue(caps["rules_shared"])
 
 
+class InstanceActivationTests(unittest.TestCase):
+    """Second launch must hand the user the EXISTING dashboard (no tray
+    needed): the engine publishes its token URL to a 0600 file in the
+    user-private runtime dir; a second launch opens it."""
+
+    def setUp(self):
+        import tempfile
+        self._dir = tempfile.mkdtemp(prefix="pfw-run-")
+        self._old = os.environ.get("XDG_RUNTIME_DIR")
+        os.environ["XDG_RUNTIME_DIR"] = self._dir
+        self.b = backend_linux.LinuxBackend()
+        self.opened = []
+        self.b.open_external = self.opened.append
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop("XDG_RUNTIME_DIR", None)
+        else:
+            os.environ["XDG_RUNTIME_DIR"] = self._old
+
+    def test_publish_then_activate_roundtrip(self):
+        url = "http://127.0.0.1:58730/#t=abc"
+        self.b.publish_instance_url(url)
+        path = self.b._instance_url_path()
+        self.assertTrue(os.path.exists(path))
+        if hasattr(os, "geteuid"):
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.assertTrue(self.b.activate_existing())
+        self.assertEqual(self.opened, [url])
+
+    def test_activate_without_file_is_false(self):
+        self.assertFalse(self.b.activate_existing())
+        self.assertEqual(self.opened, [])
+
+    def test_activate_rejects_non_local_url(self):
+        self.b.publish_instance_url("http://198.51.100.1/evil")
+        self.assertFalse(self.b.activate_existing())
+
+    def test_shutdown_removes_url_file(self):
+        self.b.publish_instance_url("http://127.0.0.1:58730/#t=abc")
+        self.b.shutdown()
+        self.assertFalse(os.path.exists(self.b._instance_url_path()))
+
+
+class AutostartTests(unittest.TestCase):
+    """Start-at-login entry: XDG autostart .desktop, tray-only (--no-open)."""
+
+    def setUp(self):
+        import tempfile
+        self._dir = tempfile.mkdtemp(prefix="pfw-cfg-")
+        self._old = os.environ.get("XDG_CONFIG_HOME")
+        os.environ["XDG_CONFIG_HOME"] = self._dir
+        self.b = backend_linux.LinuxBackend()
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop("XDG_CONFIG_HOME", None)
+        else:
+            os.environ["XDG_CONFIG_HOME"] = self._old
+
+    def test_enable_writes_tray_only_entry(self):
+        ok, msg = self.b.set_autostart(True)
+        self.assertTrue(ok, msg)
+        text = open(self.b._autostart_path()).read()
+        self.assertIn("--tray --no-open", text)
+        self.assertIn("Exec=", text)
+        self.assertIn("[Desktop Entry]", text)
+
+    def test_disable_removes_entry(self):
+        self.b.set_autostart(True)
+        ok, _ = self.b.set_autostart(False)
+        self.assertTrue(ok)
+        self.assertFalse(os.path.exists(self.b._autostart_path()))
+        ok, _ = self.b.set_autostart(False)     # idempotent
+        self.assertTrue(ok)
+
+
 class RootHelperValidationTests(unittest.TestCase):
     def test_status_allowed(self):
         root_helper.validate_ufw_argv(["status", "verbose"])

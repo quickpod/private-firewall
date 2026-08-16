@@ -753,6 +753,76 @@ class LinuxBackend(FirewallBackend):
         self._lock_fd = fd                         # keep open for process life
         return True
 
+    # -- start at login (XDG autostart, tray only) ---------------------------
+    @staticmethod
+    def _autostart_path():
+        base = os.environ.get("XDG_CONFIG_HOME") or \
+            os.path.join(os.path.expanduser("~"), ".config")
+        return os.path.join(base, "autostart",
+                            "quickopen-private-firewall.desktop")
+
+    def set_autostart(self, enabled):
+        path = self._autostart_path()
+        if not enabled:
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                return False, str(e)
+            return True, "autostart removed"
+        launcher = "/usr/bin/quickopen-private-firewall"
+        if not os.path.exists(launcher):     # source checkout / dev run
+            entry = os.path.join(os.path.dirname(
+                os.path.dirname(os.path.abspath(__file__))),
+                "private_firewall_app.py")
+            cmd = f"{shutil.which('python3') or 'python3'} {entry}"
+        else:
+            cmd = launcher
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                f.write(
+                    "[Desktop Entry]\n"
+                    "Type=Application\n"
+                    "Name=Private Firewall (tray)\n"
+                    "Comment=Firewall monitoring in the tray — the system "
+                    "firewall enforces from boot regardless\n"
+                    f"Exec={cmd} --tray --no-open\n"
+                    "Icon=quickopen-private-firewall\n"
+                    "Terminal=false\n"
+                    "X-GNOME-Autostart-enabled=true\n")
+        except OSError as e:
+            return False, str(e)
+        return True, "autostart enabled"
+
+    @staticmethod
+    def _instance_url_path():
+        run_dir = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+        return os.path.join(run_dir, f"private-firewall-{os.getuid()}.url")
+
+    def publish_instance_url(self, url):
+        """0600 file in the user-private runtime dir: same trust domain as
+        the browser tab that carries the token in its location bar."""
+        try:
+            fd = os.open(self._instance_url_path(),
+                         os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+            os.write(fd, url.encode())
+            os.close(fd)
+        except OSError:
+            pass
+
+    def activate_existing(self):
+        try:
+            with open(self._instance_url_path()) as f:
+                url = f.read().strip()
+        except OSError:
+            return False
+        if url.startswith("http://127.0.0.1:"):
+            self.open_external(url)
+            return True
+        return False
+
     def open_external(self, path):
         opener = shutil.which("xdg-open")
         if opener:
@@ -767,4 +837,8 @@ class LinuxBackend(FirewallBackend):
         return SUSPICIOUS_PATH_LINUX
 
     def shutdown(self):
+        try:
+            os.unlink(self._instance_url_path())
+        except OSError:
+            pass
         self.helper.stop()
