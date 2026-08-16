@@ -26,7 +26,10 @@ Honest feature mapping (see capabilities()):
     Ubuntu kernels) and works for v4 AND v6 (better than Windows' v4-only).
 """
 
-import fcntl
+try:
+    import fcntl                   # POSIX only; this module must still IMPORT
+except ImportError:                # on Windows (tests, PyInstaller analysis)
+    fcntl = None
 import ipaddress
 import json
 import os
@@ -738,7 +741,7 @@ class LinuxBackend(FirewallBackend):
 
     # -- environment --------------------------------------------------------
     def acquire_single_instance(self):
-        if os.environ.get("PFW_NO_SINGLETON"):
+        if os.environ.get("PFW_NO_SINGLETON") or fcntl is None:
             return True
         run_dir = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
         path = os.path.join(run_dir, f"private-firewall-{os.getuid()}.lock")
