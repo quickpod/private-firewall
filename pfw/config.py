@@ -38,10 +38,20 @@ DEFAULT_CONFIG = {
         "ttl_minutes":   60,
     },
 
-    # --- desktop notifications (tray balloons) -----------------------------
+    # --- desktop notifications (tray balloons / toasts) ---------------------
+    # MUTED BY DEFAULT (owner policy 2026-08-16): firewalls see constant
+    # background noise, so popups are strictly opt-in. Muting affects
+    # NOTIFICATIONS ONLY — enforcement, alert recording and the dashboard
+    # activity view are always on. Enabling without further tuning applies the
+    # conservative defaults below (essential-only: serious+, internet sources).
     "notifications": {
-        "balloons": True,
-        "min_severity": "warning",     # info | warning | serious | critical
+        "enabled": False,              # master switch — user must opt in
+        "balloons": True,              # popup style once enabled
+        "min_severity": "serious",     # info | warning | serious | critical
+        "categories": {
+            "internet": True,          # alerts caused by routable addresses
+            "local": False,            # alerts caused by LAN/link-local devices
+        },
     },
 
     # --- per network-location behaviour; applied automatically on change ----
@@ -49,9 +59,9 @@ DEFAULT_CONFIG = {
     # base auto-block / notification level while connected to that category.
     "auto_apply_network_profile": True,
     "network_profiles": {
-        "Public":  {"auto_block": True,  "min_severity": "warning",
+        "Public":  {"auto_block": True,  "min_severity": "serious",
                     "note": "Untrusted (hotel/cafe/airport). Be strict."},
-        "Private": {"auto_block": True,  "min_severity": "warning",
+        "Private": {"auto_block": True,  "min_severity": "serious",
                     "note": "Home / trusted LAN."},
         "Domain":  {"auto_block": False, "min_severity": "serious",
                     "note": "Managed corporate network."},
@@ -130,7 +140,16 @@ def validate(cfg):
         if merged["notifications"]["min_severity"] not in SEVERITIES:
             return False, None, "notifications.min_severity must be one of " \
                                 + "/".join(SEVERITIES)
+        merged["notifications"]["enabled"] = bool(
+            merged["notifications"].get("enabled", False))
         merged["notifications"]["balloons"] = bool(merged["notifications"]["balloons"])
+        cats = merged["notifications"].get("categories", {})
+        if not isinstance(cats, dict):
+            return False, None, "notifications.categories must be an object"
+        merged["notifications"]["categories"] = {
+            "internet": bool(cats.get("internet", True)),
+            "local": bool(cats.get("local", False)),
+        }
         for pname, prof in merged["network_profiles"].items():
             if prof.get("min_severity", "warning") not in SEVERITIES:
                 return False, None, f"network_profiles.{pname}.min_severity invalid"

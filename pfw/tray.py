@@ -174,25 +174,17 @@ class Tray:
         with s.lock:
             conns = sum(1 for c in s.conns if c.get("state") == "ESTABLISHED")
             alerts = list(s.alerts)
-            lockdown = s.rules.lockdown
+            lockdown = s.fw.get("lockdown", False)
         crit = [a for a in alerts if a["severity"] in ("critical", "serious")]
         tip = (f"PrivateFirewall\n{conns} active · {len(alerts)} alerts"
                f"{' · LOCKDOWN' if lockdown else ''}")
         newest = [a for a in alerts if a["id"] > self.last_alert_id]
         if alerts:
             self.last_alert_id = max(a["id"] for a in alerts)
-        # balloon gating from the editable profile: on/off + minimum severity
-        order = ("info", "warning", "serious", "critical")
-        notif = self.state.config.get("notifications", {})
-        balloons_on = notif.get("balloons", True)
-        try:
-            min_rank = order.index(self.state.effective_min_severity())
-        except (ValueError, AttributeError):
-            min_rank = 1
-        def _rank(s):
-            return order.index(s) if s in order else 0
-        new_notify = [a for a in newest if _rank(a["severity"]) >= min_rank]
-        if new_notify and balloons_on and not self.muted:
+        # popup gating is centralised in State.should_notify: notifications
+        # are MUTED BY DEFAULT (opt-in), filtered by severity + origin.
+        new_notify = [a for a in newest if self.state.should_notify(a)]
+        if new_notify and not self.muted:
             a = new_notify[-1]
             self._update(tip=tip, icon_warn=True, info=a["detail"],
                          info_title=f"⚠ {a['title']}",
@@ -205,8 +197,8 @@ class Tray:
     def _show_menu(self):
         s = self.state
         with s.lock:
-            lockdown = s.rules.lockdown
-            ipv6_blocked = s.rules.ipv6_blocked
+            lockdown = s.fw.get("lockdown", False)
+            ipv6_blocked = s.fw.get("ipv6_blocked", False)
         hmenu = user32.CreatePopupMenu()
         user32.AppendMenuW(hmenu, MF_STRING, ID_OPEN, "Open Dashboard")
         user32.SetMenuDefaultItem(hmenu, ID_OPEN, 0)
@@ -252,21 +244,21 @@ class Tray:
             self.muted = not self.muted
         elif cmd == ID_LOCKDOWN and self.admin:
             with self.state.lock:
-                enable = not self.state.rules.lockdown
+                enable = not self.state.fw.get("lockdown", False)
             # blocking PowerShell call — off the UI thread
             threading.Thread(target=self._toggle_lockdown, args=(enable,),
                              daemon=True).start()
         elif cmd == ID_IPV6 and self.admin:
             with self.state.lock:
-                enable = not self.state.rules.ipv6_blocked
+                enable = not self.state.fw.get("ipv6_blocked", False)
             threading.Thread(target=self._toggle_ipv6, args=(enable,),
                              daemon=True).start()
         elif cmd == ID_EXIT:
             user32.DestroyWindow(self.hwnd)
 
     def _toggle_lockdown(self, enable):
-        ok, msg = self.state.rules.set_lockdown(enable)
-        self.state.rules.refresh()
+        ok, msg = self.state.backend.set_lockdown(enable)
+        self.state.refresh_fw()
         self.state._emit_event("action",
                                f"tray lockdown {'ON' if enable else 'OFF'} ok={ok}")
         self._update(
@@ -277,8 +269,8 @@ class Tray:
             info_flag=NIIF_INFO if ok else NIIF_ERROR)
 
     def _toggle_ipv6(self, enable):
-        ok, msg = self.state.rules.set_block_ipv6(enable)
-        self.state.rules.refresh()
+        ok, msg = self.state.backend.set_block_ipv6(enable)
+        self.state.refresh_fw()
         self.state._emit_event("action",
                                f"tray block-ipv6 {'ON' if enable else 'OFF'} ok={ok}")
         self._update(

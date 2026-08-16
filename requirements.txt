@@ -1,4 +1,11 @@
-# PrivateFirewall has NO third-party runtime dependencies — it uses only the
-# Python standard library (ctypes over the Windows WFP/iphlpapi/kernel32 APIs)
-# and PowerShell. This file is intentionally empty of runtime deps; CI installs
-# only PyInstaller to freeze the engine into an .exe.
+# PrivateFirewall runtime deps are Python standard library only on BOTH
+# platforms for the engine itself (ctypes over WFP/iphlpapi + PowerShell on
+# Windows; /proc + a pkexec'd ufw helper on Linux). CI installs only
+# PyInstaller to freeze the Windows engine into an .exe.
+#
+# The single optional dependency below is the LINUX SYSTEM TRAY icon
+# (pystray needs PIL images). It is import-guarded — the app serves headless
+# without it — and is never installed on Windows (the exe uses the ctypes
+# Win32 tray). The QuickOpen deb builder maps it to python3-pil; pystray
+# itself is vendored by quickopen-runtime.
+Pillow  # Linux tray icon only (deb: python3-pil); import-guarded

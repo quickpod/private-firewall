@@ -146,12 +146,13 @@
   .feed .row{padding:3px 0;border-bottom:1px solid var(--grid);white-space:nowrap;
              overflow:hidden;text-overflow:ellipsis}
   .feed .drop{color:var(--serious)} .feed .connect{color:var(--ink-2)}
+  .feed .noise{color:var(--muted)}
   .feed .action{color:var(--down)} .feed .error{color:var(--critical)}
   .feed .when{color:var(--muted)}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
-  .toolbar input{font-family:var(--mono);font-size:12px;background:var(--field);
-    border:1px solid var(--border);border-radius:var(--radius-input);
-    color:var(--ink);padding:6px 10px}
+  .toolbar input,.toolbar select{font-family:var(--mono);font-size:12px;
+    background:var(--field);border:1px solid var(--border);
+    border-radius:var(--radius-input);color:var(--ink);padding:6px 10px}
   .toolbar input:focus{outline:none;border-color:var(--accent);
     box-shadow:0 0 0 1px var(--accent)}
   .empty{color:var(--muted);padding:16px;text-align:center;font-size:12px}
@@ -173,6 +174,29 @@
       border-radius:var(--radius-input);padding:6px 9px;font-size:12px;
       font-family:var(--mono);z-index:20;opacity:0;transition:opacity .08s;
       white-space:nowrap}
+  /* ---- in-app help viewer (theme-aware via the same Aura tokens) ---- */
+  #help-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:30;
+      display:none;align-items:flex-start;justify-content:center;
+      padding:4vh 16px}
+  #help-overlay.open{display:flex}
+  #help{background:var(--surface);border:1px solid var(--border);
+      border-radius:var(--radius-card);max-width:860px;width:100%;
+      max-height:88vh;overflow:auto;padding:22px 26px;
+      box-shadow:0 18px 50px rgba(0,0,0,.35)}
+  #help h2{font-size:17px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  #help h3{font-size:13.5px;margin:20px 0 6px;color:var(--accent);
+      text-transform:uppercase;letter-spacing:.05em}
+  #help p,#help li{font-size:13px;color:var(--ink-2);line-height:1.55}
+  #help li{margin:4px 0}
+  #help b{color:var(--ink)}
+  #help code{font-family:var(--mono);font-size:12px;background:var(--surface-2);
+      border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+  #help table{margin:8px 0;font-size:12.5px}
+  #help td,#help th{padding:6px 8px;vertical-align:top}
+  #help th{position:static;cursor:default}
+  .helpbar{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .helpbar .grow{flex:1}
+  .yes{color:var(--good)} .no{color:var(--muted)} .part{color:var(--warning)}
   svg text{fill:var(--muted);font-size:10px;font-family:var(--sans)}
   /* appearance control, right of the header */
   #theme{font-size:12px}
@@ -188,17 +212,23 @@
   <span class="pill" id="net">—</span>
   <span class="pill profile-pill" id="profile">—</span>
   <span class="pill" id="adminpill">—</span>
+  <span class="pill" id="notif-line" title="Notifications are opt-in; all activity is always visible here">—</span>
   <span class="grow"></span>
   <span class="pill" id="uptime">—</span>
+  <button id="help-btn" title="Help (F1)">Help</button>
   <button id="theme" title="System / Dark / Light">Theme: System</button>
   <button id="pause">Pause</button>
 </header>
 
 <main>
   <div id="adminbanner" class="banner" style="display:none">
-    \u26A0 Engine is running <b>unelevated</b> — the dashboard is read-only. Kill, block
-    and lockdown controls need admin. Relaunch with
-    <span class="mono">Start-PrivateFirewall.ps1</span>.
+    Engine is running <b>unelevated</b> — the dashboard is read-only. Kill, block
+    and lockdown controls need admin. <span id="adminhint"></span>
+    <button id="elevate" style="display:none;margin-left:10px">Enable admin</button>
+  </div>
+  <div id="fwbanner" class="banner" style="display:none">
+    The system firewall is <b>inactive</b> — this dashboard can observe, but
+    nothing is being enforced. Enable it from your system's security settings.
   </div>
 
   <div class="tiles">
@@ -271,7 +301,20 @@
   </div>
 
   <div class="card" style="margin-top:16px">
-    <h2>Firewall rules created by PrivateFirewall <span class="count" id="rule-count"></span></h2>
+    <h2><span id="rules-title">Firewall rules created by PrivateFirewall</span>
+      <span class="count" id="rule-count"></span></h2>
+    <div class="toolbar" id="addrule-bar" style="display:none">
+      <select id="ar-action" title="Rule action"><option>allow</option>
+        <option>deny</option><option>limit</option><option>reject</option></select>
+      <select id="ar-dir" title="Direction"><option value="in">inbound</option>
+        <option value="out">outbound</option></select>
+      <input id="ar-port" placeholder="port, range (a:b) or app profile" size="26">
+      <select id="ar-proto" title="Protocol"><option value="">tcp+udp</option>
+        <option>tcp</option><option>udp</option></select>
+      <button id="ar-add" class="on">Add rule</button>
+      <span class="grow"></span>
+      <span class="cfgmsg" id="ar-msg"></span>
+    </div>
     <div class="scroll" style="max-height:240px">
       <table id="rules"><thead><tr>
         <th>Rule</th><th>Direction</th><th>Action</th><th>Target</th><th></th>
@@ -286,6 +329,23 @@
       Live profile (<span class="mono" id="cfg-path">config.json</span>). Adjust alert
       thresholds, auto-block, per-network behaviour, trusted IPs. Edits apply on Save;
       the file is also hot-reloaded if you edit it on disk.</p>
+    <div style="border:1px solid var(--border);border-radius:var(--radius-input);
+        padding:12px;margin-bottom:12px;background:var(--surface-2)">
+      <div style="font-weight:600;margin-bottom:6px">Desktop notifications
+        <span class="count" style="font-weight:400;color:var(--muted)">
+          — off by default; the firewall still enforces and logs everything here</span></div>
+      <div class="toolbar" style="margin-bottom:0">
+        <label class="pill"><input type="checkbox" id="nf-on"> enable popups</label>
+        <label class="pill">at least
+          <select id="nf-sev" style="font-size:12px">
+            <option>warning</option><option selected>serious</option>
+            <option>critical</option></select></label>
+        <label class="pill"><input type="checkbox" id="nf-int" checked> internet sources</label>
+        <label class="pill"><input type="checkbox" id="nf-loc"> local-network sources</label>
+        <button id="nf-save" class="on">Apply</button>
+        <span class="cfgmsg" id="nf-msg"></span>
+      </div>
+    </div>
     <textarea id="cfg" spellcheck="false"></textarea>
     <div class="cfgbar">
       <button id="cfg-save" class="on">Save &amp; apply</button>
@@ -297,6 +357,153 @@
   </div>
 </main>
 
+
+<div id="help-overlay">
+  <div id="help" role="dialog" aria-label="Help">
+    <div class="helpbar">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+        stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round"
+        stroke-linecap="round" aria-hidden="true"><path d="M12 3 4.5 6.2v5.4c0
+        4.6 3.1 8.3 7.5 9.4 4.4-1.1 7.5-4.8 7.5-9.4V6.2L12 3Z"/></svg>
+        Private Firewall — Help</h2>
+      <span class="grow"></span>
+      <button id="help-close">Close (Esc)</button>
+    </div>
+    <p>Private Firewall is a live dashboard and control panel for the firewall
+    that is <b>already built into your computer</b>. It never replaces the
+    system firewall — it watches it, explains it, and lets you act on it.
+    If this app is closed or crashes, your firewall keeps protecting you
+    exactly as configured (fail-open design). Everything runs on your own
+    machine; nothing is sent anywhere.</p>
+
+    <h3>Who is enforcing the rules</h3>
+    <p><b id="help-plat">—</b></p>
+    <ul>
+      <li><b>Windows:</b> rules are enforced in the kernel by Windows Firewall
+      (the Windows Filtering Platform, WFP). Private Firewall writes its rules
+      into a dedicated group named <code>PrivateFirewall</code>, so everything
+      it creates can be reviewed — and removed — in one place.</li>
+      <li><b>Linux / Quick OS:</b> rules are enforced by
+      <b>ufw</b> (the Uncomplicated Firewall, on netfilter). Quick OS ships ufw
+      <b>enabled</b> with safe defaults: incoming connections blocked, outgoing
+      allowed, remote login (SSH) allowed. Every rule this app creates carries a
+      <code>PFW</code> comment; the system's own rules are listed too (marked
+      <i>system</i>) but can never be removed from here.</li>
+    </ul>
+
+    <h3>Rules basics</h3>
+    <ul>
+      <li><b>Allow</b> lets traffic through, <b>Block/Deny</b> drops it.
+      <b>Inbound</b> is traffic coming to your machine, <b>Outbound</b> is what
+      your apps send out.</li>
+      <li><b>Per-app vs per-port:</b> Windows can allow or block a specific
+      <i>program</i> (per-.exe rules — a WFP feature). Linux firewalls filter by
+      <i>port, address and application profile</i>, never by program. That is why
+      the “block app” button exists only on Windows, and the port/profile rule
+      form only on Linux. This is an honest platform difference, not a missing
+      button.</li>
+      <li><b>Block an IP</b> blocks all traffic to <i>and</i> from that address.
+      Automatic blocks (port scans, brute force) expire on their own.</li>
+      <li><b>Lockdown</b> (zero-trust outbound) blocks <i>all</i> outgoing
+      traffic except what you explicitly allow. DNS and DHCP stay open so the
+      network itself keeps working. Expect apps to stop reaching the internet
+      until you allow them.</li>
+      <li><b>Network profiles</b> (Public / Private / Domain) are a Windows
+      concept: the app automatically tightens alerting on untrusted (Public)
+      Wi-Fi. Linux has no equivalent, so the profile pill is hidden there.</li>
+      <li><b>Rule order (Linux):</b> the first matching rule wins. Blocks
+      created here are placed at the top, above the system's allows.</li>
+    </ul>
+
+    <h3>Windows vs Linux — what is different</h3>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>Feature</th><th>Windows</th><th>Linux</th></tr></thead>
+      <tbody>
+        <tr><td>Enforced by</td><td>Windows Firewall (WFP)</td><td>ufw / netfilter</td></tr>
+        <tr><td>Per-application rules</td><td class="yes">yes</td>
+            <td class="no">no — use port or profile rules</td></tr>
+        <tr><td>Port / app-profile rules</td><td class="no">via per-app UI</td>
+            <td class="yes">yes</td></tr>
+        <tr><td>Kill one connection</td><td class="part">IPv4 only</td>
+            <td class="yes">IPv4 + IPv6</td></tr>
+        <tr><td>Network profiles (Public/Private/Domain)</td>
+            <td class="yes">yes</td><td class="no">no</td></tr>
+        <tr><td>Block all IPv6</td><td>unbinds IPv6 from adapters</td>
+            <td>kernel setting (sysctl)</td></tr>
+        <tr><td>Hostnames next to IPs</td><td class="yes">from the DNS cache</td>
+            <td class="no">not available</td></tr>
+        <tr><td>Rule list shows</td><td>only this app's rules</td>
+            <td>this app's <i>and</i> system rules (system ones read-only)</td></tr>
+        <tr><td>Admin rights</td><td>app runs elevated (UAC at launch)</td>
+            <td>one system authorization per session (polkit); read-only if declined</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Safe defaults</h3>
+    <ul>
+      <li>This app <b>never disables the system firewall</b>. On Linux the
+      privileged helper refuses to run <code>ufw disable</code>/<code>reset</code>
+      at all, even if asked. Quick OS's shipped policy (deny incoming, allow
+      outgoing, SSH allowed) stays in place.</li>
+      <li>Everything the app creates is tagged (rule group on Windows,
+      <code>PFW</code> comments on Linux) so it can be reverted cleanly; the
+      Windows uninstaller removes every rule it added.</li>
+      <li>The dashboard listens only on <code>127.0.0.1</code> and requires the
+      launch token — it is not reachable from the network.</li>
+    </ul>
+
+    <h3>Alerts &amp; notifications — off by default</h3>
+    <ul>
+      <li>Firewalls see constant background noise, so <b>popup notifications
+      are muted until you turn them on</b> (Settings → Desktop notifications).
+      Muting affects popups only: the firewall keeps enforcing rules, and every
+      alert, drop and event is always recorded right here on the dashboard —
+      the header shows “Protection active — notifications off”.</li>
+      <li>When you enable popups, conservative defaults apply: only
+      <i>serious</i> and <i>critical</i> alerts, only from internet sources.
+      You can widen this (severity threshold, local-network sources) in the
+      same panel.</li>
+      <li>Even with notifications on, link-local / ICMPv6 / multicast
+      background traffic stays below the alert line — it is classified as
+      background, never as an attack.</li>
+    </ul>
+
+    <h3>Troubleshooting</h3>
+    <ul>
+      <li><b>“Engine is running unelevated / read-only”:</b> on Windows,
+      relaunch from the Start Menu shortcut (it elevates via UAC). On Linux,
+      click <i>Enable admin</i> in the banner and approve the system prompt.</li>
+      <li><b>A rule doesn't seem to take effect:</b> connections that were
+      already open keep running until they close — use <i>kill</i> on the
+      connection row or wait. Check the rule actually appears in the rules list.
+      On Linux remember the first matching rule wins.</li>
+      <li><b>Locked out of remote login (SSH) on Linux:</b> Private Firewall
+      never removes the system SSH rule and cannot disable ufw, so a lockout can
+      only come from a rule you added — an IP block covering your own address,
+      or a deny on port 22. Remove it from the rules list. If you are already
+      locked out, from the machine's own console run
+      <code>sudo ufw status numbered</code> then
+      <code>sudo ufw delete &lt;number&gt;</code>.</li>
+      <li><b>“The system firewall is inactive” (Linux):</b> enable it from your
+      system's security settings, or from a console:
+      <code>sudo ufw enable</code>. Quick OS ships it enabled.</li>
+      <li><b>Why do I see blocked local traffic in the feed?</b> Home networks
+      are chatty: routers, phones, TVs and virtual adapters constantly announce
+      themselves (IPv6 neighbor discovery, multicast, IGMP). A deny-incoming
+      firewall drops that chatter as a matter of course. Private Firewall shows
+      it dimmed as “local background traffic” and never counts it as an attack
+      — alerts are reserved for real patterns such as port scans or repeated
+      connection attempts from routable addresses.</li>
+      <li><b>“Blocked today” stays at 0 / empty feed:</b> the blocked-connection
+      feed needs firewall logging: the Windows installer turns on drop-logging;
+      on Linux ufw's default logging (<code>low</code>) is enough — if it was
+      turned off, alerts based on drops can't fire either.</li>
+      <li><b>The app won't start a second time:</b> only one engine runs per
+      machine — find the running one in the tray, or open
+      <code>http://127.0.0.1:58730</code>.</li>
+    </ul>
+  </div>
+</div>
 <div class="tt" id="tt"></div>
 
 <script>
@@ -351,7 +558,7 @@ async function poll(){
 }
 
 const SEV_ICON = {critical:"\u2716",serious:"\u25B2",warning:"\u26A0",good:"\u2713"};
-const ICONS = {connect:"→",drop:"✗",action:"⚙",error:"!",listen:"◉"};
+const ICONS = {connect:"→",drop:"✗",action:"⚙",error:"!",listen:"◉",noise:"·"};
 
 function render(d){
   // tiles
@@ -381,18 +588,36 @@ function render(d){
   $("#ipv6").className = d.ipv6_blocked?"on":"";
   $("#ipv6").textContent = d.ipv6_blocked?"allow IPv6":"block all IPv6";
 
-  // header
-  $("#net").textContent = d.profiles.length
-    ? d.profiles.map(p=>`${p.alias}: ${p.category}`).join("  ·  ") : "no active network";
+  // header (capability-driven: network categories are a Windows concept)
+  const caps = d.caps||{};
+  $("#net").textContent = (caps.net_profiles!==false && d.profiles.length)
+    ? d.profiles.map(p=>`${p.alias}: ${p.category}`).join("  ·  ")
+    : ((d.interfaces&&d.interfaces.length)
+        ? d.interfaces.join(" · ") : "no active network");
   $("#net").className = "pill"+(d.profiles.some(p=>p.category==="Public")?" warn":"");
+  $("#profile").style.display = caps.net_profiles===false?"none":"";
   const prof = d.active_profile;
   $("#profile").textContent = prof ? `profile: ${prof}` : "profile: —";
   $("#profile").className = "pill profile-pill"+(prof==="Public"?" warn":"");
   $("#profile").title = d.notify ? `notify ≥ ${d.notify.min_severity}` : "";
   $("#uptime").textContent = "engine "+dur(d.uptime);
+  const nOn = d.notify && d.notify.enabled;
+  $("#notif-line").textContent = "Protection "+
+    (d.fw_active===false?"INACTIVE":"active")+" — notifications "+
+    (nOn?"on":"off (enable in Settings)");
+  $("#notif-line").className = "pill"+(d.fw_active===false?" warn":"");
   $("#adminpill").textContent = d.admin?"admin ✓":"read-only";
   $("#adminpill").className = "pill"+(d.admin?"":" warn");
   $("#adminbanner").style.display = d.admin?"none":"block";
+  $("#adminhint").textContent = caps.elevate_hint||"";
+  $("#elevate").style.display = (!d.admin && caps.elevate_live)?"":"none";
+  $("#fwbanner").style.display = d.fw_active===false?"block":"none";
+  $("#addrule-bar").style.display = (caps.port_rules&&d.admin)?"flex":"none";
+  if(caps.rules_shared)
+    $("#rules-title").textContent = "Firewall rules — "+(caps.firewall||"system");
+  $("#help-plat").textContent = caps.platform==="linux"
+    ? "This computer: Linux — rules are enforced by ufw."
+    : "This computer: Windows — rules are enforced by Windows Firewall (WFP).";
 
   drawChart(d.history);
   drawTalkers(d.conns);
@@ -445,7 +670,8 @@ function renderConns(conns, admin){
   });
   const tb = $("#conns tbody");
   tb.innerHTML = rows.slice(0,400).map(c=>{
-    const killable = admin && c.kill && c.state==="ESTABLISHED";
+    const caps=(last&&last.caps)||{};
+    const killable = admin && caps.kill_conn!==false && c.kill && c.state==="ESTABLISHED";
     return `<tr>
       <td title="${esc(c.path)}">${esc(c.proc)}</td>
       <td class="mono">${c.pid}</td><td>${c.proto}</td>
@@ -456,7 +682,7 @@ function renderConns(conns, admin){
       <td style="white-space:nowrap">
         ${killable?`<button class="danger" onclick='killConn(${JSON.stringify(c.kill)})'>kill</button>`:""}
         ${admin&&c.raddr!=="*"&&c.class!=="loopback"?`<button onclick="blockIp('${esc(c.raddr)}')">block IP</button>`:""}
-        ${admin&&c.path?`<button onclick="blockApp('${esc(c.path).replace(/'/g,"\\'")}')">block app</button>`:""}
+        ${admin&&caps.app_rules!==false&&c.path?`<button onclick="blockApp('${esc(c.path).replace(/'/g,"\\'")}')">block app</button>`:""}
       </td></tr>`;
   }).join("") || '<tr><td colspan="8" class="empty">No connections match.</td></tr>';
 }
@@ -464,12 +690,13 @@ function renderConns(conns, admin){
 function renderRules(rules, admin){
   $("#rule-count").textContent = rules.length?rules.length+" active":"none";
   const tb = $("#rules tbody");
-  if(!rules.length){ tb.innerHTML='<tr><td colspan="5" class="empty">No PrivateFirewall rules. Block an IP or app to create one.</td></tr>'; return; }
+  if(!rules.length){ tb.innerHTML='<tr><td colspan="5" class="empty">No firewall rules yet. Block an IP to create one.</td></tr>'; return; }
   tb.innerHTML = rules.map(r=>`<tr>
     <td>${esc(r.name)}</td><td>${esc(r.dir)}</td>
     <td style="color:${r.action==='Block'||r.action==='4'?'var(--critical)':'var(--good)'}">${esc(actName(r.action))}</td>
     <td class="mono">${esc(r.remote||r.program||"any")}</td>
-    <td>${admin?`<button onclick="unblock('${esc(r.name).replace(/'/g,"\\'")}')">remove</button>`:""}</td>
+    <td>${r.ours===false?'<span class="tag">system</span>'
+        :(admin?`<button onclick="unblock('${esc(r.name).replace(/'/g,"\\'")}')">remove</button>`:"")}</td>
   </tr>`).join("");
 }
 
@@ -556,6 +783,21 @@ async function blockApp(path){ if(confirm("Block outbound network for:\n"+path+"
 async function unblock(name){ if(confirm("Remove firewall rule:\n"+name+"?")){await api("/api/unblock",{name});poll();} }
 
 $("#block-ip-btn").onclick=()=>{const ip=prompt("IP address to block (in+out):");if(ip)blockIp(ip.trim());};
+$("#elevate").onclick=async()=>{
+  $("#elevate").disabled=true;$("#elevate").textContent="waiting for authorization…";
+  try{ await api("/api/elevate",{}); }finally{
+    $("#elevate").disabled=false;$("#elevate").textContent="Enable admin";poll(); }
+};
+function arMsg(t,ok){const m=$("#ar-msg");m.textContent=t;m.className="cfgmsg "+(ok?"ok":"err");}
+$("#ar-add").onclick=async()=>{
+  let port=$("#ar-port").value.trim(), proto=$("#ar-proto").value;
+  if(!port){arMsg("enter a port or app profile",false);return;}
+  const m=port.match(/^(.+)\/(tcp|udp)$/); if(m){port=m[1];proto=m[2];}
+  const j=await api("/api/add-rule",{action:$("#ar-action").value,port,
+    proto:proto||null,direction:$("#ar-dir").value});
+  if(j.ok){arMsg("rule added ✓",true);$("#ar-port").value="";poll();}
+  else arMsg(j.msg||j.error||"failed",false);
+};
 $("#lockdown").onclick=async()=>{
   const on=last&&last.lockdown;
   const msg=on?"Disable lockdown and allow outbound by default?":
@@ -564,12 +806,24 @@ $("#lockdown").onclick=async()=>{
 };
 $("#ipv6").onclick=async()=>{
   const on=last&&last.ipv6_blocked;
-  const msg=on?"Re-enable IPv6 on all adapters?":
-    "Block ALL IPv6?\n\nThis unbinds the IPv6 protocol from every network adapter (immediate, no reboot, reversible). Only do this if your network works over IPv4 — some ISPs/services prefer IPv6.";
+  const how=(last&&last.caps&&last.caps.ipv6_how)||"disables IPv6 on every network adapter";
+  const msg=on?"Re-enable IPv6?":
+    "Block ALL IPv6?\n\nThis "+how+" (immediate, no reboot, reversible). Only do this if your network works over IPv4 — some ISPs/services prefer IPv6.";
   if(confirm(msg)){await api("/api/block-ipv6",{enable:!on});setTimeout(poll,1500);}
 };
 $("#pause").onclick=()=>{paused=!paused;$("#pause").textContent=paused?"Resume":"Pause";
   $("#pause").className=paused?"on":"";if(!paused&&last)render(last);};
+
+// ---- help viewer (button + F1; Esc or click-away closes) ----
+function helpOpen(on){ $("#help-overlay").className=on?"open":""; }
+$("#help-btn").onclick=()=>helpOpen(true);
+$("#help-close").onclick=()=>helpOpen(false);
+$("#help-overlay").addEventListener("click",e=>{
+  if(e.target===$("#help-overlay")) helpOpen(false); });
+document.addEventListener("keydown",e=>{
+  if(e.key==="F1"){e.preventDefault();helpOpen(true);}
+  if(e.key==="Escape") helpOpen(false);
+});
 
 // ---- appearance: System -> Dark -> Light ----
 // "system" is the default and removes the attribute entirely, so the page
@@ -606,9 +860,31 @@ async function loadConfig(force){
     const r=await fetch("/api/config",{headers:{"X-PFW-Token":TOKEN}});
     const j=await r.json();
     $("#cfg").value=JSON.stringify(j,null,2);
+    const nf=j.notifications||{};
+    $("#nf-on").checked=!!nf.enabled;
+    if(nf.min_severity) $("#nf-sev").value=nf.min_severity;
+    const cats=nf.categories||{};
+    $("#nf-int").checked=cats.internet!==false;
+    $("#nf-loc").checked=!!cats.local;
     cfgDirty=false; cfgMsg("",true);
   }catch(e){cfgMsg("could not load config",false);}
 }
+function nfMsg(t,ok){const m=$("#nf-msg");m.textContent=t;m.className="cfgmsg "+(ok?"ok":"err");}
+$("#nf-save").onclick=async()=>{
+  if(!last||!last.admin){nfMsg("needs admin",false);return;}
+  try{
+    const r=await fetch("/api/config",{headers:{"X-PFW-Token":TOKEN}});
+    const cfg=await r.json();
+    cfg.notifications=Object.assign({},cfg.notifications,{
+      enabled:$("#nf-on").checked,
+      min_severity:$("#nf-sev").value,
+      categories:{internet:$("#nf-int").checked,local:$("#nf-loc").checked}});
+    const j=await api("/api/config",{config:cfg});
+    if(j.ok){nfMsg($("#nf-on").checked?"notifications on ✓":"notifications off ✓",true);
+      await loadConfig(true); poll();}
+    else nfMsg(j.msg||"rejected",false);
+  }catch(e){nfMsg("failed: "+e.message,false);}
+};
 $("#cfg-format").onclick=()=>{
   try{ $("#cfg").value=JSON.stringify(JSON.parse($("#cfg").value),null,2); cfgMsg("formatted ✓",true); }
   catch(e){ cfgMsg("invalid JSON: "+e.message,false); }

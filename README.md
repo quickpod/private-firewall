@@ -1,13 +1,21 @@
 # PrivateFirewall
 
-A user-mode **control plane and monitoring dashboard on top of Windows Firewall
-(WFP)** for a single Windows 10/11 laptop. It gives you a live view of every
-active connection, throughput, and listening port; a kill switch and dynamic
-block/allow rules; boot-time default-deny-outbound enforcement; and an
+A user-mode **control plane and monitoring dashboard on top of the firewall
+your OS already has** — Windows Firewall (WFP) on Windows 10/11, **ufw** on
+Linux (Quick OS / Ubuntu). It gives you a live view of every active
+connection, throughput, and listening port; a kill switch and dynamic
+block/allow rules; zero-trust default-deny-outbound lockdown; and an
 intrusion/anomaly **alert engine** (port scans, brute-force, new listeners,
 plaintext-DNS bypass, host fan-out, upload surges).
 
-Pure Python standard library + PowerShell. No drivers, no external packages.
+Pure Python standard library (+ PowerShell on Windows, ufw/pkexec on Linux).
+No drivers, no external packages. The same single-page dashboard on both OSes;
+platform differences are surfaced honestly (see the feature map below).
+
+**Notifications are off by default** on both platforms: firewalls see constant
+background noise, so popups are strictly opt-in (Settings → Desktop
+notifications). Enforcement, alert recording and the dashboard activity view
+are always on — the header shows "Protection active — notifications off".
 
 > **100% AI-built and open source**, published on [QuickOpen](https://quickopen.ai/projects/private-firewall). Apache-2.0.
 
@@ -15,15 +23,16 @@ Pure Python standard library + PowerShell. No drivers, no external packages.
 
 ## Architecture — read this first
 
-> **The Windows Filtering Platform (WFP) is the packet entry point, not this app.**
+> **The kernel firewall (WFP on Windows, netfilter/ufw on Linux) is the packet
+> entry point, not this app.**
 
-WFP already sits in the kernel as the single choke point for **all** wired and
+It already sits in the kernel as the single choke point for **all** wired and
 wireless traffic. PrivateFirewall does **not** re-route packets and does not try
 to be a packet filter of its own. That is deliberate:
 
-- **Fail-open.** If the Python engine crashes or is killed, WFP keeps enforcing
-  the configured policy. Your machine is never left unprotected because a
-  user-mode process died.
+- **Fail-open.** If the Python engine crashes or is killed, the kernel firewall
+  keeps enforcing the configured policy. Your machine is never left unprotected
+  because a user-mode process died.
 - **Enforced before any app connects.** A user program can never guarantee it
   starts before every outbound connection. The kernel can. So "block before
   anything connects" is implemented by writing a **persistent default-deny
@@ -54,7 +63,78 @@ and acts (kill connections, author WFP rules in a dedicated rule group).
 
 ---
 
-## Install
+## Platform architecture (the port, honestly)
+
+Everything platform-specific lives behind ONE interface — `pfw/backend.py`:
+
+```
+                    pfw/server.py  (platform-neutral)
+        state manager · alert engine · HTTP API · dashboard
+                              │ FirewallBackend
+        ┌─────────────────────┴──────────────────────┐
+ pfw/backend_windows.py                     pfw/backend_linux.py
+ WFP via ctypes/iphlpapi + PowerShell       ufw CLI + /proc + ufw.log
+ (the original engine, moved intact;        privileged ops via ONE pkexec'd
+ runs elevated via UAC at launch)           root helper per session
+                                            (pfw/root_helper.py — refuses
+                                            ufw enable/disable/reset outright)
+```
+
+The dashboard reads the backend's **capability flags** and shows only what the
+platform can truly do.
+
+### Windows ↔ Linux feature map
+
+| Feature | Windows | Linux (Quick OS / Ubuntu) |
+|---|---|---|
+| Enforced by | Windows Firewall (WFP) | ufw / netfilter |
+| Live connections + process attribution | IP Helper API | `/proc/net` + inode→pid |
+| Per-**application** rules | **yes** (WFP `-Program`) | **no** — netfilter has no per-binary match; use port / app-profile rules |
+| Port / range / ufw app-profile rules | via the per-app UI only | **yes** (`allow/deny/limit/reject`, in/out) |
+| Block an IP (in+out, auto-expiring) | yes (rule group) | yes (`PFW`-commented rules, prepended) |
+| Kill a single TCP connection | IPv4 only (`SetTcpEntry`) | IPv4 **and** IPv6 (`ss -K`) |
+| Lockdown (default-deny outbound, DNS+DHCP kept open) | yes | yes (`ufw default deny outgoing`) |
+| Network profiles (Public/Private/Domain) | yes | **no equivalent** — pill hidden |
+| Block all IPv6 | unbind `ms_tcpip6` from adapters | `disable_ipv6` sysctl |
+| Hostnames next to remote IPs | Windows DNS cache | **not available** |
+| Blocked-connection feed | `pfirewall.log` | `/var/log/ufw.log` (`[UFW BLOCK]`) |
+| Rule list shows | only PrivateFirewall's rules | PrivateFirewall's **and** system ufw rules (system ones read-only, deliberately) |
+| Elevation | app runs elevated (UAC) | one polkit (pkexec) authorization per session; read-only if declined, with an "Enable admin" retry button |
+| System tray | ctypes Win32 tray | pystray (falls back to headless dashboard) |
+
+Deliberate safety property of the Linux port: the root helper **whitelists ufw
+verbs** and refuses `enable`/`disable`/`reset`, so nothing this app does — even
+a bug — can switch the OS firewall off, remove the system SSH allow, or change
+what Quick OS shipped enabled. Only `PFW`-tagged rules can be removed via the
+app.
+
+---
+
+## Install — Linux (Quick OS / Ubuntu)
+
+**Quick OS:** install from the App Store, or double-click the signed `.usi`
+one-click installer from the [QuickOpen page](https://quickopen.ai/projects/private-firewall).
+
+**Ubuntu 24.04 (apt repo):**
+
+```sh
+curl -fsSL https://r2.quickopen.io/aiquick-apt/quickopen-archive-keyring.gpg | sudo tee /usr/share/keyrings/quickopen-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/quickopen-archive-keyring.gpg] https://r2.quickopen.io/aiquick-apt noble main" | sudo tee /etc/apt/sources.list.d/aiquick.list
+sudo apt update && sudo apt install quickopen-private-firewall
+```
+
+Launch **Private Firewall** from the menu. The engine runs as your user; on
+first privileged action it asks for ONE system authorization (polkit prompt —
+the UAC analog). Decline it and the dashboard still works read-only. Per-user
+state lives in `~/.local/share/PrivateFirewall/` (`config.json` + audit logs).
+
+ufw stays exactly as your OS shipped it: enabled, deny-incoming,
+allow-outgoing, SSH allowed. The app coexists with rules you (or the OS) made —
+they are listed as *system* and cannot be touched from the app.
+
+---
+
+## Install — Windows
 
 ### From the QuickOpen signed installer (recommended)
 
@@ -207,7 +287,12 @@ to defaults, so partial edits and upgrades are safe. It controls:
   suspicious-path / ARP-spoof).
 - **Auto-block**: automatically block scanners/brute-forcers for a TTL (default:
   block port-scanners for 60 min, then the rule auto-expires).
-- **Notifications**: tray balloons on/off and a minimum severity.
+- **Notifications**: **off by default (opt-in)** — master enable, popup
+  style, minimum severity (default `serious`), and origin categories
+  (internet vs local-network sources; local is off by default). Even when
+  enabled, link-local / ICMPv6 / multicast background chatter is classified as
+  background noise and never alerted — and "port 0" never appears anywhere;
+  the protocol name (ICMPv6, IGMP, …) is shown instead.
 - **Per-network profiles** (`Public` / `Private` / `Domain`): applied
   automatically when the network category changes. A travelling laptop tightens
   up on untrusted **Public** Wi-Fi (auto-block on, lower notification bar) and
@@ -296,3 +381,29 @@ Design and capability targets tracked in [FEATURES.md](FEATURES.md). Near-term:
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE). PrivateFirewall is a 100% AI-built project published on QuickOpen; the only human involvement is testing and guidance.
+
+
+---
+
+## Troubleshooting (both platforms)
+
+The dashboard's **Help** button (or `F1`) covers all of this in-app, in both
+Aura themes. Highlights:
+
+- **Read-only banner** — Windows: relaunch elevated (Start Menu shortcut).
+  Linux: click *Enable admin* and authorize the polkit prompt.
+- **Rule not taking effect** — already-open connections keep running until
+  closed (use *kill*); on Linux the first matching rule wins and PrivateFirewall
+  places its blocks at the top.
+- **Locked out of SSH (Linux)** — PrivateFirewall never removes the system SSH
+  rule and cannot disable ufw; a lockout can only come from a rule you added.
+  From the machine's console: `sudo ufw status numbered`, then
+  `sudo ufw delete <number>`.
+- **"System firewall inactive" (Linux)** — `sudo ufw enable` (Quick OS ships it
+  enabled; the app itself will never toggle it).
+- **Why blocked "local traffic" in the feed?** — routers/phones/virtual
+  adapters constantly announce themselves (IPv6 NDP, multicast, IGMP); a
+  deny-incoming firewall drops that chatter as a matter of course. It is shown
+  dimmed as background, never counted or alerted as an attack.
+- **No popups** — that's the default. Notifications are opt-in: Settings →
+  Desktop notifications.
