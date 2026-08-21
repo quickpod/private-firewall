@@ -131,7 +131,26 @@ class Tray:
 
     # -- icon helpers -------------------------------------------------------
     def _icon(self, warning):
-        return user32.LoadIconW(None, c_void_p(IDI_WARNING if warning else IDI_SHIELD))
+        """The tray icon: this app's own icon normally, a warning glyph on alert.
+
+        PyInstaller's --icon lands private-firewall.ico in the exe as group icon
+        resource 1, so LoadIconW against our OWN module handle finds it. Passing
+        NULL as the module - as this did - asks for a STOCK system icon instead,
+        which is why the tray showed the generic Windows shield rather than the
+        PrivateFirewall shield the shortcuts and Add/Remove Programs both use.
+        IDI_SHIELD stays as the fallback for a source run, where the module is
+        python.exe and carries no icon of ours.
+        """
+        if warning:
+            return user32.LoadIconW(None, c_void_p(IDI_WARNING))
+        try:
+            own = user32.LoadIconW(c_void_p(kernel32.GetModuleHandleW(None)),
+                                   c_void_p(1))
+            if own:
+                return own
+        except Exception:
+            pass
+        return user32.LoadIconW(None, c_void_p(IDI_SHIELD))
 
     def _add_icon(self):
         nid = NOTIFYICONDATAW()
